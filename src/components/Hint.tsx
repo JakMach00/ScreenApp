@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 
 interface Props {
   text: string;
+  /** Keeps the icon in the flow instead of overlaying the top right corner. */
+  inline?: boolean;
   children: ReactNode;
 }
 
@@ -11,65 +13,69 @@ const TIP_WIDTH = 260;
 const TIP_GAP = 12;
 
 /**
- * Explains a control after a deliberate pause. The delay keeps the tooltip out
- * of the way while someone is simply moving the mouse across the sidebar, and
- * the tooltip is rendered in a portal so the scrolling panel cannot clip it.
+ * Explains a control on hover, after a short pause so the tooltip stays out of
+ * the way while the pointer is only crossing the panel. The info icon makes it
+ * discoverable, and focusing that icon shows the same text without a mouse.
  */
-export default function Hint({ text, children }: Props) {
-  const anchorRef = useRef<HTMLSpanElement | null>(null);
+export default function Hint({ text, inline, children }: Props) {
+  const anchorRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef(0);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
-  // The anchor uses display: contents so it does not disturb the sidebar
-  // layout, which means it generates no box of its own. Bubbling mouseover and
-  // mouseout are therefore used rather than enter and leave.
-  const handleOver = (event: React.MouseEvent) => {
-    if (position || timerRef.current) return;
-    // The anchor itself uses display: contents and therefore has no box of its
-    // own, so measuring it would return zeros and pin the tooltip to the top
-    // left corner. The hovered control is measured instead.
-    const hovered = (event.target as HTMLElement | null)?.closest(
-      'label, button, select, .field, .check',
-    ) as HTMLElement | null;
-    const element = hovered ?? (anchorRef.current?.firstElementChild as HTMLElement | null);
-    if (!element) return;
+  const place = () => {
+    const box = anchorRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const overflowsRight = box.right + TIP_WIDTH + TIP_GAP * 2 > window.innerWidth;
+    setPosition({
+      top: Math.max(8, Math.min(box.top + box.height / 2 - 30, window.innerHeight - 140)),
+      left: overflowsRight ? Math.max(8, box.left - TIP_WIDTH - TIP_GAP) : box.right + TIP_GAP,
+    });
+  };
 
+  const scheduleShow = () => {
+    if (position || timerRef.current) return;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = 0;
-      const box = element.getBoundingClientRect();
-      if (box.width === 0 && box.height === 0) return;
-      const overflowsRight = box.right + TIP_WIDTH + TIP_GAP * 2 > window.innerWidth;
-      const top = Math.max(
-        8,
-        Math.min(box.top + box.height / 2 - 28, window.innerHeight - 140),
-      );
-      setPosition({
-        top,
-        left: overflowsRight
-          ? Math.max(8, box.left - TIP_WIDTH - TIP_GAP)
-          : box.right + TIP_GAP,
-      });
+      place();
     }, DELAY_MS);
   };
 
-  const handleOut = (event: React.MouseEvent) => {
-    const next = event.relatedTarget as Node | null;
-    if (next && anchorRef.current && anchorRef.current.contains(next)) return;
+  const hide = () => {
     window.clearTimeout(timerRef.current);
     timerRef.current = 0;
     setPosition(null);
   };
 
+  const handleOut = (event: React.MouseEvent) => {
+    const next = event.relatedTarget as Node | null;
+    if (next && anchorRef.current && anchorRef.current.contains(next)) return;
+    hide();
+  };
+
   return (
-    <span
+    <div
       ref={anchorRef}
-      className="hint-anchor"
-      onMouseOver={handleOver}
+      className={inline ? 'hint-anchor inline' : 'hint-anchor'}
+      onMouseOver={scheduleShow}
       onMouseOut={handleOut}
     >
-      {children}
+      <div className="hint-body">{children}</div>
+      <span
+        className="hint-icon"
+        role="button"
+        tabIndex={0}
+        aria-label="What this option does"
+        onFocus={place}
+        onBlur={hide}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="8" cy="4.9" r="0.95" fill="currentColor" />
+          <rect x="7.2" y="6.9" width="1.6" height="5" rx="0.6" fill="currentColor" />
+        </svg>
+      </span>
       {position
         ? createPortal(
             <div className="tip" style={{ top: position.top, left: position.left }}>
@@ -78,6 +84,6 @@ export default function Hint({ text, children }: Props) {
             document.body,
           )
         : null}
-    </span>
+    </div>
   );
 }

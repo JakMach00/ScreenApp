@@ -46,9 +46,6 @@ type QualityKey = keyof typeof QUALITY;
 
 type Theme = 'dark' | 'light';
 
-/** Which action the workspace and the sidebar put first. */
-type Mode = 'screenshot' | 'record';
-
 const FORMAT_OPTIONS: { id: VideoFormat; label: string }[] = [
   { id: 'mp4', label: 'MP4 (H.264, plays everywhere)' },
   { id: 'webm', label: 'WebM (VP9, smaller files)' },
@@ -103,7 +100,6 @@ export default function App() {
   const [failedShortcuts, setFailedShortcuts] = useState<string[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [mode, setMode] = useState<Mode>(() => loadSetting<Mode>('mode', 'screenshot'));
   const [theme, setTheme] = useState<Theme>(() =>
     loadSetting<Theme>('theme', window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'),
   );
@@ -132,7 +128,6 @@ export default function App() {
   useEffect(() => saveSetting('audioSource', audioSource), [audioSource]);
   useEffect(() => saveSetting('videoFormat', videoFormat), [videoFormat]);
   useEffect(() => saveSetting('checkOnStart', checkOnStart), [checkOnStart]);
-  useEffect(() => saveSetting('mode', mode), [mode]);
   useEffect(() => saveSetting('dismissedVersion', dismissedVersion), [dismissedVersion]);
   useEffect(() => saveSetting('hideOnCapture', hideOnCapture), [hideOnCapture]);
   useEffect(() => saveSetting('clearAfterExport', clearAfterExport), [clearAfterExport]);
@@ -575,7 +570,8 @@ export default function App() {
 
   const videoCount = shots.length - images.length;
   const canExport = shots.length > 0;
-  const exportLabel = images.length === 0 ? 'Save recordings' : 'Save PDF and recordings';
+  const exportLabel =
+    images.length === 0 && videoCount > 0 ? 'Save recordings' : 'Save PDF and rec';
   const runExport = images.length === 0 ? exportVideos : exportAll;
   const activeQuality = QUALITY[quality].label;
   const activeAudio = AUDIO_OPTIONS.find((o) => o.id === audioSource)?.label ?? 'No audio';
@@ -585,7 +581,7 @@ export default function App() {
       <h2> Capture
       </h2>
       <button
-        className={mode === 'screenshot' ? 'action primary' : 'action'}
+        className="action"
         onClick={() => void captureFull()}
         disabled={busy}
         aria-label="Capture full screen"
@@ -619,7 +615,7 @@ export default function App() {
       ) : (
         <>
           <button
-            className={mode === 'record' ? 'action primary' : 'action'}
+            className="action"
             onClick={() => void startRecording(null)}
             disabled={busy}
             aria-label="Record full screen"
@@ -644,25 +640,20 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">ScreenApp</span>
         </div>
-        <div className="mode-switch" role="group" aria-label="Mode">
-          <button
-            className={mode === 'screenshot' ? 'mode active' : 'mode'}
-            onClick={() => setMode('screenshot')}
-            aria-pressed={mode === 'screenshot'}
-          >
-            Screenshot
-          </button>
-          <button
-            className={mode === 'record' ? 'mode active' : 'mode'}
-            onClick={() => setMode('record')}
-            aria-pressed={mode === 'record'}
-          >
-            Record
-          </button>
-        </div>
+        <button
+          className="theme-switch"
+          role="switch"
+          aria-checked={theme === 'dark'}
+          aria-label="Switch colour theme"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
+          <span className="theme-track" aria-hidden="true">
+            <span className="theme-knob" />
+          </span>
+          <span className="theme-label">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+        </button>
         <span className="spacer" />
         {recording ? (
           <span className="rec-live">
@@ -670,9 +661,6 @@ export default function App() {
             Recording {formatDuration(elapsed)}
           </span>
         ) : null}
-        <button className="ghost" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? 'Light' : 'Dark'}
-        </button>
       </header>
 
       <div className="body">
@@ -705,17 +693,8 @@ export default function App() {
             </Hint>
           </section>
 
-          {mode === 'screenshot' ? (
-            <>
-              {captureSection}
-              {recordingSection}
-            </>
-          ) : (
-            <>
-              {recordingSection}
-              {captureSection}
-            </>
-          )}
+          {captureSection}
+          {recordingSection}
 
           <section className="group" aria-label="Output">
             <h2> Output
@@ -827,7 +806,10 @@ export default function App() {
               {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
             </button>
             {images.length > 0 && videoCount > 0 ? (
-              <Hint text="Writes the recordings on their own into a folder you choose, with no PDF. Useful when a clip is worth sending on before the screenshots are finished.">
+              <Hint
+                inline
+                text="Writes the recordings on their own into a folder you choose, with no PDF. Useful when a clip is worth sending on before the screenshots are finished."
+              >
                 <button className="action" onClick={() => void exportVideos()} disabled={busy}>
                   <span>Save recordings only</span>
                 </button>
@@ -916,20 +898,27 @@ export default function App() {
               </svg>
               <h3>Nothing captured yet</h3>
               <p>
-                {mode === 'screenshot'
-                  ? 'Pick a display on the left, then capture the whole screen or a region.'
-                  : 'Pick a display on the left, then record the whole screen or a region.'}
+                Pick a display on the left, then capture the screen or record it. Everything
+                stays on this device until you export it.
               </p>
-              <button
-                className="action primary wide"
-                onClick={() =>
-                  mode === 'screenshot' ? void captureFull() : void startRecording(null)
-                }
-                disabled={busy || recording}
-              >
-                <span>{mode === 'screenshot' ? 'Capture full screen' : 'Record full screen'}</span>
-                <kbd>{mode === 'screenshot' ? shortcuts.capture : shortcuts.record}</kbd>
-              </button>
+              <div className="empty-actions">
+                <button
+                  className="action primary"
+                  onClick={() => void captureFull()}
+                  disabled={busy}
+                >
+                  <span>Capture full screen</span>
+                  {shortcuts.capture ? <kbd>{shortcuts.capture}</kbd> : null}
+                </button>
+                <button
+                  className="action"
+                  onClick={() => void startRecording(null)}
+                  disabled={busy || recording}
+                >
+                  <span>Record full screen</span>
+                  {shortcuts.record ? <kbd>{shortcuts.record}</kbd> : null}
+                </button>
+              </div>
               <p className="empty-meta">
                 {source ? `${source.name} ${source.width} x ${source.height}` : 'No display found'}
                 <span className="dot-sep" />

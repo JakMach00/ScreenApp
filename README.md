@@ -35,7 +35,11 @@ and they can be changed in the app (the "Keyboard shortcuts" button).
 Annotations stay editable after they are drawn. A selected shape shows white handles: the two
 ends of an arrow, the four corners of a box, an ellipse, a highlight or a redaction. Dragging a
 handle reshapes it, dragging the body moves it, and the colour, thickness, step number and text
-controls change the selected item live instead of only affecting the next one. Leaving a
+controls change the selected item live instead of only affecting the next one.
+
+Clicking an existing step or text label while the same tool is active picks it up rather than
+stacking a new one on top of it. Undoing or deleting the most recent step hands its number back,
+so the sequence continues from the right place. The highlighter starts yellow. Leaving a
 screenshot with unsaved annotations asks first whether to save, discard or stay.
 
 Two rules drive these defaults. A global shortcut is taken away from every other application,
@@ -162,13 +166,11 @@ sidebar of settings, the workspace, and a status bar carrying the last action an
 version. Only the sidebar and the workspace scroll, and they scroll independently, so the status
 bar and the primary actions stay reachable at 1024 x 768.
 
-The sidebar is grouped into Source, Capture, Recording, Output, Export and Utilities. Section
-numbers come from a CSS counter rather than being written into the markup, because the mode
-switch reorders Capture and Recording and hardcoded numbers would end up out of sequence.
+The sidebar is grouped into Source, Capture, Recording, Output, Export and Utilities, numbered
+by a CSS counter so the markup carries no numbers to keep in sync.
 
-The mode switch changes which action is emphasized and which section comes first, and it changes
-the primary button in the empty workspace. It hides nothing: every capture and recording control
-stays visible in both modes.
+The title bar holds the application name and an animated light and dark toggle. The empty
+workspace offers both first actions, capture and record, with their shortcuts.
 
 One accent colour is used, and only for the primary action of the current mode, active states
 and positive status. Everything else is border and text weight, so there is never a question
@@ -209,7 +211,9 @@ release artifact is named from `package.json` while the workflow triggers on the
 
 ## Tooltips
 
-Every option in the sidebar explains itself after the pointer rests on it for two seconds. The
+Every option in the sidebar carries a small info icon and explains itself after the pointer
+rests on it for a second. The icon can also be focused with the keyboard, which shows the same
+text immediately. The
 delay is deliberate: a tooltip that appears instantly turns into noise while the mouse is only
 crossing the panel. Tooltips render in a portal so the panel cannot clip them, and they flip to
 the other side when they would run off the screen edge.

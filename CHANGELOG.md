@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.1
+
+- No sidebar action is styled as preselected any more. The accent is left to the export button
+  and to the first action in the empty workspace.
+- The export button reads "Save PDF and rec" on an empty session instead of claiming a
+  recordings only export, and stays disabled until something has been captured.
+- The Capture full screen button in the sidebar is no longer filled with the accent colour. A
+  filled button among a stack of plain ones reads as a selected state rather than as emphasis.
+  The accent now marks only the export action and the call to action in the empty workspace.
+- No sidebar action is styled as preselected any more. The accent is left to the export button
+  and to the first action in the empty workspace.
+- Every option carrying an explanation now shows a small info icon, so it is obvious that
+  hovering it says what the option does. Focusing the icon shows the same text without a mouse.
+- Restored the accent on the main capture action, which had been lost with the mode switch.
+
 ## 1.7.0
 
 Interface only, no change to capture, recording, export, shortcuts or IPC.
@@ -8,13 +23,17 @@ Interface only, no change to capture, recording, export, shortcuts or IPC.
   workspace scrolling independently.
 - Grouped the sidebar into Source, Capture, Recording, Output, Export and Utilities, numbered by
   a CSS counter so the mode switch cannot put the numbers out of order.
-- Added a Screenshot and Record switch that reorders the sidebar and changes the primary action
-  without hiding any control.
+- Replaced the mode switch and the brand mark in the title bar with an animated light and dark
+  toggle. The empty workspace offers both capture and record as first actions.
 - Reworked the empty workspace: what to do next, the primary action with its shortcut, and the
   display, audio and quality currently in use.
 - Moved to a single lime accent used only for the primary action, active states and positive
   status, with consistent button heights and visible hover, focus, disabled and checked states.
 - Replaced the native confirm on Delete all with an in-app dialog that says what will be removed.
+- Editor: clicking an existing step or text label with the same tool active moves it instead of
+  creating another one on top.
+- Editor: undoing or deleting the most recent step returns its number to the sequence.
+- Editor: the highlighter starts yellow.
 
 ## 1.6.0
 

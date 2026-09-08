@@ -12,6 +12,7 @@ interface Props {
 }
 
 const COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#ffffff', '#111111'];
+const HIGHLIGHT_COLOR = '#ffcc00';
 const TOOLS: { id: ToolId; label: string }[] = [
   { id: 'select', label: 'Select' },
   { id: 'arrow', label: 'Arrow' },
@@ -324,6 +325,15 @@ export default function Editor({ shot, index, total, onSave, onClose, onNavigate
       return;
     }
 
+    if (tool === 'step' || tool === 'text') {
+      const existing = hitTest(p.x, p.y);
+      if (existing && existing.type === tool) {
+        setSelectedId(existing.id);
+        dragRef.current = { mode: 'move', id: existing.id, ox: p.x, oy: p.y };
+        return;
+      }
+    }
+
     if (tool === 'step') {
       const a: Annotation = {
         id: uid(),
@@ -461,14 +471,25 @@ export default function Editor({ shot, index, total, onSave, onClose, onNavigate
   };
 
   const undo = useCallback(() => {
-    setAnnotations((prev) => prev.slice(0, -1));
+    setAnnotations((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.type === 'step') setNextStep(last.n);
+      return prev.slice(0, -1);
+    });
     setSelectedId(null);
     setDirty(true);
   }, []);
 
   const removeSelected = useCallback(() => {
     if (!selectedId) return;
-    setAnnotations((prev) => prev.filter((a) => a.id !== selectedId));
+    setAnnotations((prev) => {
+      const target = prev.find((a) => a.id === selectedId);
+      if (target && target.type === 'step') {
+        const highest = Math.max(...prev.filter((a) => a.type === 'step').map((a) => a.n));
+        if (target.n === highest) setNextStep(target.n);
+      }
+      return prev.filter((a) => a.id !== selectedId);
+    });
     setSelectedId(null);
     setDirty(true);
   }, [selectedId]);
@@ -555,7 +576,12 @@ export default function Editor({ shot, index, total, onSave, onClose, onNavigate
           <button
             key={t.id}
             className={tool === t.id ? 'tool active' : 'tool'}
-            onClick={() => setTool(t.id)}
+            onClick={() => {
+              setTool(t.id);
+              // The highlighter is a marker pen, so it starts yellow. Only the
+              // drawing colour changes, a selected annotation is left alone.
+              if (t.id === 'highlight') setColor(HIGHLIGHT_COLOR);
+            }}
           >
             {t.label}
           </button>
