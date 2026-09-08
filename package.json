@@ -1,0 +1,53 @@
+{
+  "name": "screenapp",
+  "productName": "ScreenApp",
+  "version": "1.0.0",
+  "description": "Screen capture, annotation and PDF documentation tool",
+  "main": "electron/main.js",
+  "author": "Jakub",
+  "license": "MIT",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "dist": "npm run build && electron-builder --win zip --publish never",
+    "start": "npm run build && electron ."
+  },
+  "dependencies": {
+    "jspdf": "^2.5.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "pl.jakub.screenapp",
+    "productName": "ScreenApp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "zip"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "ScreenApp-${version}-win-x64.${ext}"
+    },
+    "compression": "maximum"
+  }
+}
