@@ -19,7 +19,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   capture: 'Capture whole screen',
   region: 'Capture region',
   record: 'Start and stop recording',
-  export: 'Save PDF and rec',
+  export: 'Save PDF and recordings',
 };
 
 const MODIFIER_KEYS = ['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'];

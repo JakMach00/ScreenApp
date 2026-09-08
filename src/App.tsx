@@ -570,8 +570,9 @@ export default function App() {
 
   const videoCount = shots.length - images.length;
   const canExport = shots.length > 0;
-  const exportLabel =
-    images.length === 0 && videoCount > 0 ? 'Save recordings' : 'Save PDF and rec';
+  // Kept short so it never collides with the shortcut badge. Recordings are
+  // always written next to the PDF, which the Export section explains.
+  const exportLabel = images.length === 0 && videoCount > 0 ? 'Save recordings' : 'Save PDF';
   const runExport = images.length === 0 ? exportVideos : exportAll;
   const activeQuality = QUALITY[quality].label;
   const activeAudio = AUDIO_OPTIONS.find((o) => o.id === audioSource)?.label ?? 'No audio';

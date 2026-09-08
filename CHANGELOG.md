@@ -1,16 +1,29 @@
 # Changelog
 
-## 1.7.1
+## 1.7.2
 
 - No sidebar action is styled as preselected any more. The accent is left to the export button
   and to the first action in the empty workspace.
-- The export button reads "Save PDF and rec" on an empty session instead of claiming a
-  recordings only export, and stays disabled until something has been captured.
+- The export button reads "Save PDF", or "Save recordings" for a recordings only session, and
+  stays disabled until something has been captured. The longer label did not fit next to the
+  shortcut badge. Recordings are still written next to the PDF.
+
+## 1.7.1
+
 - The Capture full screen button in the sidebar is no longer filled with the accent colour. A
   filled button among a stack of plain ones reads as a selected state rather than as emphasis.
   The accent now marks only the export action and the call to action in the empty workspace.
+
+## 1.7.2
+
 - No sidebar action is styled as preselected any more. The accent is left to the export button
   and to the first action in the empty workspace.
+- The export button reads "Save PDF", or "Save recordings" for a recordings only session, and
+  stays disabled until something has been captured. The longer label did not fit next to the
+  shortcut badge. Recordings are still written next to the PDF.
+
+## 1.7.1
+
 - Every option carrying an explanation now shows a small info icon, so it is obvious that
   hovering it says what the option does. Focusing the icon shows the same text without a mouse.
 - Restored the accent on the main capture action, which had been lost with the mode switch.
