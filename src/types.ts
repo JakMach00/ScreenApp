@@ -92,7 +92,11 @@ export interface CaptureResult {
 export interface ExportVideo {
   data: Uint8Array;
   ext: string;
+  /** Used when exporting recordings without a PDF to name them after. */
+  name: string;
 }
+
+export type ExportMode = 'bundle' | 'videos';
 
 export interface ExportResult {
   dir: string;
@@ -131,6 +135,7 @@ export interface ScreenAppApi {
     videos: ExportVideo[],
     defaultName: string,
     targetDir?: string | null,
+    mode?: ExportMode,
   ) => Promise<ExportResult | null>;
   chooseFolder: () => Promise<string | null>;
   reveal: (filePath: string) => Promise<RevealResult>;
@@ -140,4 +145,7 @@ declare global {
   interface Window {
     api: ScreenAppApi;
   }
+
+  /** Injected by Vite from the version field in package.json. */
+  const __APP_VERSION__: string;
 }

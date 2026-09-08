@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor';
 import Gallery from './components/Gallery';
+import Hint from './components/Hint';
 import RegionSelector from './components/RegionSelector';
 import VideoPlayer from './components/VideoPlayer';
 import ShortcutSettings from './components/ShortcutSettings';
@@ -361,6 +362,58 @@ export default function App() {
     [],
   );
 
+  const collectVideos = useCallback(
+    async () =>
+      Promise.all(
+        shots
+          .filter((s) => s.kind === 'video')
+          .map(async (s) => ({
+            data: new Uint8Array(await s.blob.arrayBuffer()),
+            ext: s.ext || 'webm',
+            name: s.name,
+          })),
+      ),
+    [shots],
+  );
+
+  /** Writes the recordings on their own, without building a PDF. */
+  const exportVideos = useCallback(async () => {
+    const recordings = shots.filter((s) => s.kind === 'video');
+    if (recordings.length === 0) {
+      setStatus('There are no recordings to export.');
+      return;
+    }
+    setBusy(true);
+    setStatus('Saving recordings...');
+    try {
+      const videos = await collectVideos();
+      const result = await window.api.exportBundle(
+        null,
+        videos,
+        '',
+        useSaveDir ? saveDir : null,
+        'videos',
+      );
+      if (!result) {
+        setStatus('Export cancelled.');
+        return;
+      }
+      setLastDir(result.dir);
+      setStatus(`Saved ${result.videoPaths.length} recording(s) to ${result.dir}.`);
+      if (clearAfterExport) {
+        setShots((prev) => {
+          const remaining = prev.filter((s) => s.kind !== 'video');
+          prev.filter((s) => s.kind === 'video').forEach((s) => URL.revokeObjectURL(s.url));
+          return remaining;
+        });
+      }
+    } catch (err) {
+      setStatus(`Export failed: ${String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [shots, collectVideos, useSaveDir, saveDir, clearAfterExport]);
+
   const exportAll = useCallback(async () => {
     if (shots.length === 0) {
       setStatus('There is nothing to export.');
@@ -378,14 +431,7 @@ export default function App() {
           })
         : null;
 
-      const videos = await Promise.all(
-        shots
-          .filter((s) => s.kind === 'video')
-          .map(async (s) => ({
-            data: new Uint8Array(await s.blob.arrayBuffer()),
-            ext: s.ext || 'webm',
-          })),
-      );
+      const videos = await collectVideos();
 
       const target = useSaveDir ? saveDir : null;
       const result = await window.api.exportBundle(
@@ -416,7 +462,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [shots, compressPdf, clearAfterExport, useSaveDir, saveDir]);
+  }, [shots, images, collectVideos, compressPdf, clearAfterExport, useSaveDir, saveDir]);
 
   useEffect(() => {
     saveSetting('shortcuts.v2', shortcuts);
@@ -442,7 +488,10 @@ export default function App() {
       else if (action === 'record') {
         if (recording) void stopRecording();
         else void startRecording(null);
-      } else if (action === 'export') void exportAll();
+      } else if (action === 'export') {
+        if (images.length === 0) void exportVideos();
+        else void exportAll();
+      }
     });
     return off;
   }, [
@@ -456,6 +505,8 @@ export default function App() {
     startRecording,
     stopRecording,
     exportAll,
+    exportVideos,
+    images.length,
   ]);
 
   const editing = editorPos !== null ? images[editorPos] ?? null : null;
@@ -487,14 +538,16 @@ export default function App() {
               ))}
             </select>
           </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={hideOnCapture}
-              onChange={(e) => setHideOnCapture(e.target.checked)}
-            />
-            Hide window while capturing
-          </label>
+          <Hint text="The window is hidden for a moment so it does not appear in the screenshot. It is left alone when it is minimized or sitting on another monitor, and it never takes focus back.">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={hideOnCapture}
+                onChange={(e) => setHideOnCapture(e.target.checked)}
+              />
+              Hide window while capturing
+            </label>
+          </Hint>
         </section>
 
         <section className="group">
@@ -529,6 +582,7 @@ export default function App() {
               </button>
             </>
           )}
+          <Hint text="MP4 uses H.264 and opens in Windows Media Player Legacy. WebM uses VP9, giving noticeably smaller files, but older players cannot read it.">
           <label className="field">
             <span>Format</span>
             <select
@@ -543,6 +597,8 @@ export default function App() {
               ))}
             </select>
           </label>
+          </Hint>
+          <Hint text="Microphone records the Windows default input, system audio records what the machine is playing. If a source is unavailable the recording continues silently and says why.">
           <label className="field">
             <span>Audio</span>
             <select
@@ -557,6 +613,8 @@ export default function App() {
               ))}
             </select>
           </label>
+          </Hint>
+          <Hint text="Sets frame rate, bitrate and scale together. Low is about 3 to 4 MB per minute at 1080p and is enough for defect documentation, High keeps small text sharp.">
           <label className="field">
             <span>Quality</span>
             <select
@@ -571,41 +629,48 @@ export default function App() {
               ))}
             </select>
           </label>
+          </Hint>
         </section>
 
         <section className="group">
           <h2>Export</h2>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={clearAfterExport}
-              onChange={(e) => setClearAfterExport(e.target.checked)}
-            />
-            Clear after saving the PDF
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={compressPdf}
-              onChange={(e) => setCompressPdf(e.target.checked)}
-            />
-            Compress images in the PDF
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={useSaveDir}
-              onChange={(e) => {
-                if (!e.target.checked) {
-                  setUseSaveDir(false);
-                  return;
-                }
-                if (saveDir) setUseSaveDir(true);
-                else void chooseSaveDir();
-              }}
-            />
-            Always use one folder
-          </label>
+          <Hint text="After a successful export the gallery is emptied, so the next task starts clean. Leave it off to keep the material and delete it yourself.">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={clearAfterExport}
+                onChange={(e) => setClearAfterExport(e.target.checked)}
+              />
+              Clear after saving the PDF
+            </label>
+          </Hint>
+          <Hint text="Screenshots go into the PDF as JPEG instead of PNG. The file gets much smaller, at the cost of slightly softer text. Turn it off when the document has to stay pixel exact.">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={compressPdf}
+                onChange={(e) => setCompressPdf(e.target.checked)}
+              />
+              Compress images in the PDF
+            </label>
+          </Hint>
+          <Hint text="Exports go straight to a folder you pick once, with no save dialog. Files are never overwritten, a repeated name gets a counter.">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={useSaveDir}
+                onChange={(e) => {
+                  if (!e.target.checked) {
+                    setUseSaveDir(false);
+                    return;
+                  }
+                  if (saveDir) setUseSaveDir(true);
+                  else void chooseSaveDir();
+                }}
+              />
+              Always use one folder
+            </label>
+          </Hint>
           {useSaveDir ? (
             <div className="folder-row">
               <span className="folder-path" title={saveDir ?? ''}>
@@ -614,10 +679,30 @@ export default function App() {
               <button onClick={() => void chooseSaveDir()}>Change</button>
             </div>
           ) : null}
-          <button className="primary" onClick={() => void exportAll()} disabled={busy}>
-            <span>Save PDF and recordings</span>
-            {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
-          </button>
+          {images.length === 0 ? (
+            <button
+              className="primary"
+              onClick={() => void exportVideos()}
+              disabled={busy || shots.length - images.length === 0}
+            >
+              <span>Save recordings</span>
+              {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
+            </button>
+          ) : (
+            <>
+              <button className="primary" onClick={() => void exportAll()} disabled={busy}>
+                <span>Save PDF and recordings</span>
+                {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
+              </button>
+              {shots.length - images.length > 0 ? (
+                <Hint text="Writes the recordings on their own into a folder you choose, with no PDF. Useful when a clip is worth sending on its own while the screenshots are still work in progress.">
+                  <button onClick={() => void exportVideos()} disabled={busy}>
+                    <span>Save recordings only</span>
+                  </button>
+                </Hint>
+              ) : null}
+            </>
+          )}
           {lastDir ? (
             <button className="link" onClick={() => void openOutputFolder()}>
               Open output folder
@@ -651,7 +736,10 @@ export default function App() {
 
         <Gallery shots={shots} onOpen={openShot} onDelete={deleteShot} />
 
-        <footer className={busy ? 'status busy' : 'status'}>{status}</footer>
+        <footer className={busy ? 'status busy' : 'status'}>
+          <span className="status-text">{status}</span>
+          <span className="version">v{__APP_VERSION__}</span>
+        </footer>
       </main>
 
       {frozen ? (

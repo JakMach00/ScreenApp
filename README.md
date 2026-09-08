@@ -144,6 +144,33 @@ Windows 11 has a per-application microphone switch in Settings, Privacy and secu
 Microphone. An unsigned application that has never been granted access will simply fail there,
 and the status bar will say so.
 
+## Exporting
+
+The primary export writes a PDF of the screenshots plus every recording as separate files next
+to it. With no screenshots in the gallery there is nothing to document, so the button becomes
+"Save recordings" and skips the PDF entirely, asking for a folder rather than a document name.
+When screenshots and recordings sit side by side, "Save recordings only" writes just the clips,
+which is what you want when a recording made during a screenshot session is worth sending on
+before the rest of the documentation is finished. That path keeps the clip's own file name,
+while a full export names the recordings after the PDF so they stay grouped.
+
+## Version number
+
+The status bar shows the running version in its bottom right corner. It comes from the
+`version` field in `package.json`, injected by Vite at build time as `__APP_VERSION__`, so there
+is one place to change and nothing to keep in sync by hand.
+
+Releasing therefore means bumping `version` in `package.json`, adding the entry to
+`CHANGELOG.md`, and tagging `v<version>`. The tag and the field have to match, because the
+release artifact is named from `package.json` while the workflow triggers on the tag.
+
+## Tooltips
+
+Every option in the sidebar explains itself after the pointer rests on it for two seconds. The
+delay is deliberate: a tooltip that appears instantly turns into noise while the mouse is only
+crossing the panel. Tooltips render in a portal so the panel cannot clip them, and they flip to
+the other side when they would run off the screen edge.
+
 ## Export location
 
 By default every export asks where to save, which is the behaviour of a tool used across

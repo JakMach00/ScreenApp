@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+- Recordings can be exported without a PDF. With no screenshots the export button switches to
+  recordings only, and when both are present a separate button writes just the clips.
+- Recordings exported on their own keep their own file names and go to a folder of your choice.
+- Every sidebar option explains itself in a tooltip after a two second hover.
+- The running version is shown in the bottom right corner, read from package.json at build time.
+
 ## 1.4.0
 
 - Recordings can be written as MP4 (H.264), which Windows Media Player Legacy can open, or as

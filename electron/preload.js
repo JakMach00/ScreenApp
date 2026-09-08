@@ -18,8 +18,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('shortcut:trigger', listener);
     return () => ipcRenderer.removeListener('shortcut:trigger', listener);
   },
-  exportBundle: (pdf, videos, defaultName, targetDir) =>
-    ipcRenderer.invoke('export:bundle', { pdf, videos, defaultName, targetDir: targetDir || null }),
+  exportBundle: (pdf, videos, defaultName, targetDir, mode) =>
+    ipcRenderer.invoke('export:bundle', {
+      pdf,
+      videos,
+      defaultName,
+      targetDir: targetDir || null,
+      mode: mode || 'bundle',
+    }),
   chooseFolder: () => ipcRenderer.invoke('dialog:choose-folder'),
   reveal: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
 });

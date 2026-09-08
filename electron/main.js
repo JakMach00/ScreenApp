@@ -237,21 +237,47 @@ async function uniquePath(candidate) {
 }
 
 ipcMain.handle('export:bundle', async (_event, payload) => {
-  const { pdf, videos, defaultName, targetDir } = payload || {};
+  const { pdf, videos, defaultName, targetDir, mode } = payload || {};
   if (!win) throw new Error('The application window is not available.');
+
+  let usableDir = null;
+  if (targetDir) {
+    try {
+      const stat = await fs.stat(targetDir);
+      if (stat.isDirectory()) usableDir = targetDir;
+    } catch {
+      usableDir = null;
+    }
+  }
+
+  // Recordings only: no PDF is produced, so the user picks a folder rather
+  // than a document name.
+  if (mode === 'videos') {
+    let dir = usableDir;
+    if (!dir) {
+      const picked = await dialog.showOpenDialog(win, {
+        title: 'Choose a folder for the recordings',
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (picked.canceled || picked.filePaths.length === 0) return null;
+      dir = picked.filePaths[0];
+    }
+    const paths = [];
+    for (let i = 0; i < (videos || []).length; i += 1) {
+      const video = videos[i];
+      const name = video.name || `recording_${String(i + 1).padStart(2, '0')}.${video.ext || 'webm'}`;
+      const target = await uniquePath(path.join(dir, name));
+      await fs.writeFile(target, Buffer.from(video.data));
+      paths.push(target);
+    }
+    return { dir, pdfPath: '', videoPaths: paths, usedDefaultFolder: Boolean(usableDir) };
+  }
 
   let pdfPath = null;
 
   // A configured folder skips the dialog, but only while it is still usable.
-  if (targetDir) {
-    try {
-      const stat = await fs.stat(targetDir);
-      if (stat.isDirectory()) {
-        pdfPath = await uniquePath(path.join(targetDir, defaultName || 'documentation.pdf'));
-      }
-    } catch {
-      pdfPath = null;
-    }
+  if (usableDir) {
+    pdfPath = await uniquePath(path.join(usableDir, defaultName || 'documentation.pdf'));
   }
 
   if (!pdfPath) {
@@ -281,7 +307,7 @@ ipcMain.handle('export:bundle', async (_event, payload) => {
     videoPaths.push(target);
   }
 
-  return { dir, pdfPath, videoPaths, usedDefaultFolder: Boolean(targetDir) };
+  return { dir, pdfPath, videoPaths, usedDefaultFolder: Boolean(usableDir) };
 });
 
 function registerBindings(bindings) {

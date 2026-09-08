@@ -394,9 +394,25 @@ kbd {
   font-size: 12px;
   color: var(--muted);
   background: var(--panel);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-text {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.version {
+  flex: none;
+  opacity: 0.6;
+  font-family: "Cascadia Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .status.busy {
@@ -661,4 +677,23 @@ progress {
   width: 120px;
   height: 8px;
   accent-color: var(--accent);
+}
+
+.hint-anchor {
+  display: contents;
+}
+
+.tip {
+  position: fixed;
+  width: 260px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.55;
+  z-index: 90;
+  pointer-events: none;
 }
