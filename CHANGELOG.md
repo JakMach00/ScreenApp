@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- Recordings can be written as MP4 (H.264), which Windows Media Player Legacy can open, or as
+  WebM (VP9) for smaller files. MP4 is the default.
+- MP4 support is checked at runtime and falls back to WebM with a note when the H.264 encoder is
+  missing, instead of failing the recording.
+- Exported file names and the speed conversion follow the container the clip was recorded in.
+
 ## 1.3.0
 
 - Audio recording from the Windows default devices: microphone, system audio through loopback,

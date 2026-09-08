@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDuration, formatSize } from '../lib/capture';
 import { changeSpeed, speedName } from '../lib/transcode';
+import type { VideoFormat } from '../types';
 import type { Shot } from '../types';
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
     durationMs: number;
     thumbUrl: string;
     name: string;
+    ext: string;
   }) => void;
   onStatus: (message: string) => void;
   onClose: () => void;
@@ -48,10 +50,16 @@ export default function VideoPlayer({ shot, bitrate, onReplace, onStatus, onClos
         rate,
         // A faster clip carries more motion per second, so the bitrate is
         // raised a little to keep small text readable.
-        { fps: 24, bitrate: Math.round(bitrate * 1.3), hasAudio: shot.hasAudio },
+        {
+          fps: 24,
+          bitrate: Math.round(bitrate * 1.3),
+          hasAudio: shot.hasAudio,
+          // The conversion keeps whatever container the clip already uses.
+          format: (shot.ext === 'mp4' ? 'mp4' : 'webm') as VideoFormat,
+        },
         (ratio) => setProgress(ratio),
       );
-      onReplace({ ...result, name: speedName(shot.name, rate) });
+      onReplace({ ...result, name: speedName(shot.name, rate, result.ext) });
       onStatus(`Recording is now ${rate}x, length ${formatDuration(result.durationMs)}.`);
       setRate(1);
     } catch (err) {

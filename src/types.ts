@@ -18,6 +18,8 @@ export type ShotKind = 'image' | 'video';
 
 export type AudioSource = 'none' | 'mic' | 'system' | 'both';
 
+export type VideoFormat = 'mp4' | 'webm';
+
 export interface Shot {
   id: string;
   kind: ShotKind;
@@ -30,6 +32,8 @@ export interface Shot {
   createdAt: number;
   durationMs: number;
   hasAudio: boolean;
+  /** File extension the recording was actually encoded as. */
+  ext: string;
 }
 
 export type ToolId =

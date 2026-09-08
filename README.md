@@ -72,9 +72,8 @@ setting, the toggle sits in the top right of the sidebar, and the pick is rememb
 
 ## Known limits
 
-- Recordings are **WebM (VP9)**, because that is what `MediaRecorder` produces. Chrome, Edge,
-  VLC and Windows 11 play them. MP4 would require shipping ffmpeg and transcoding after each
-  recording stops.
+- MP4 recording relies on the H.264 encoder being present. When it is not, the recording falls
+  back to WebM and the status bar says so, rather than failing.
 - **The PDF does not contain playable video.** Embedding video in a PDF (RichMedia) only works
   in Adobe Acrobat and is ignored by browsers, so the video is deliberately saved as a separate
   file next to the PDF.
@@ -108,6 +107,22 @@ duration drops.
 Audio survives the conversion. The element is routed into an offline audio destination instead
 of the speakers, so nothing is heard while converting, and `preservesPitch` keeps speech at its
 normal pitch at higher rates.
+
+## Video format
+
+The Format selector offers MP4 (H.264) or WebM (VP9). MP4 is the default because Windows Media
+Player Legacy cannot open WebM at all, and a recording that a developer cannot play is worth
+nothing regardless of its size.
+
+No ffmpeg is involved. Chromium has written MP4 from `MediaRecorder` since version 126 and
+Electron 33 carries Chromium 130 with proprietary codecs enabled, so H.264 is produced directly.
+Support is still checked at runtime through `MediaRecorder.isTypeSupported`, because the encoder
+is not guaranteed on every machine, and a missing one drops the recording to WebM with a note on
+the status bar instead of failing.
+
+The trade-off is size. H.264 needs roughly 30 to 50 percent more bitrate than VP9 for the same
+image, so WebM stays available for material that is only ever watched inside a browser. The
+speed conversion keeps whatever container the clip already uses.
 
 ## Audio
 

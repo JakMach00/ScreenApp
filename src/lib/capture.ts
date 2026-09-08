@@ -192,9 +192,10 @@ export function makeShot(params: {
   durationMs?: number;
   name?: string;
   hasAudio?: boolean;
+  ext?: string;
 }): Shot {
   const created = new Date();
-  const ext = params.kind === 'image' ? 'png' : 'webm';
+  const ext = params.kind === 'image' ? 'png' : params.ext ?? 'webm';
   return {
     id: uid(),
     kind: params.kind,
@@ -207,6 +208,7 @@ export function makeShot(params: {
     createdAt: created.getTime(),
     durationMs: params.durationMs ?? 0,
     hasAudio: params.hasAudio ?? false,
+    ext,
   };
 }
 

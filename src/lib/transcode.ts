@@ -1,5 +1,6 @@
 import { makeThumb } from './capture';
-import { pickMimeType } from './recorder';
+import { extForMimeType, pickMimeType } from './recorder';
+import type { VideoFormat } from '../types';
 
 export interface SpeedResult {
   blob: Blob;
@@ -7,6 +8,7 @@ export interface SpeedResult {
   height: number;
   durationMs: number;
   thumbUrl: string;
+  ext: string;
 }
 
 export interface SpeedOptions {
@@ -16,6 +18,8 @@ export interface SpeedOptions {
   bitrate: number;
   /** Whether the source carries an audio track that has to survive. */
   hasAudio?: boolean;
+  /** Container to write, normally the one the source already uses. */
+  format?: VideoFormat;
 }
 
 function even(value: number): number {
@@ -114,8 +118,9 @@ export async function changeSpeed(
       ...(audioTrack ? [audioTrack] : []),
     ]);
 
+    const mimeType = pickMimeType(Boolean(audioTrack), options.format ?? 'webm');
     const recorder = new MediaRecorder(output, {
-      mimeType: pickMimeType(Boolean(audioTrack)),
+      mimeType,
       videoBitsPerSecond: options.bitrate,
       audioBitsPerSecond: 96000,
     });
@@ -165,6 +170,7 @@ export async function changeSpeed(
       height,
       durationMs: performance.now() - started,
       thumbUrl,
+      ext: extForMimeType(mimeType),
     };
   } finally {
     if (timer) window.clearInterval(timer);
@@ -178,7 +184,7 @@ export async function changeSpeed(
 }
 
 /** Keeps one speed marker in the file name instead of stacking them up. */
-export function speedName(name: string, factor: number): string {
-  const base = name.replace(/\.webm$/i, '').replace(/_[\d.]+x$/i, '');
-  return `${base}_${String(factor).replace(/\.0$/, '')}x.webm`;
+export function speedName(name: string, factor: number, ext: string): string {
+  const base = name.replace(/\.(webm|mp4)$/i, '').replace(/_[\d.]+x$/i, '');
+  return `${base}_${String(factor).replace(/\.0$/, '')}x.${ext}`;
 }

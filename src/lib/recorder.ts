@@ -1,4 +1,4 @@
-import type { AudioSource, Rect } from '../types';
+import type { AudioSource, Rect, VideoFormat } from '../types';
 import {
   getDisplayStream,
   getMicrophoneTrack,
@@ -21,6 +21,8 @@ export interface RecordOptions {
   scale: number;
   /** Which audio to mix into the recording. */
   audio: AudioSource;
+  /** Container to write. MP4 falls back to WebM when H.264 is unavailable. */
+  format: VideoFormat;
 }
 
 export interface RecordResult {
@@ -30,16 +32,32 @@ export interface RecordResult {
   durationMs: number;
   thumbUrl: string;
   hasAudio: boolean;
+  ext: string;
 }
 
-export function pickMimeType(withAudio = false): string {
-  const candidates = withAudio
+/**
+ * MP4 with H.264 plays in Windows Media Player Legacy, which cannot open WebM.
+ * Chromium can write it directly since version 126, but the H.264 encoder is
+ * not guaranteed on every machine, so support is checked at runtime and WebM
+ * is used as the fallback.
+ */
+export function pickMimeType(withAudio = false, format: VideoFormat = 'webm'): string {
+  const mp4 = withAudio
+    ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,opus', 'video/mp4']
+    : ['video/mp4;codecs=avc1.42E01E', 'video/mp4'];
+  const webm = withAudio
     ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
     : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+
+  const candidates = format === 'mp4' ? [...mp4, ...webm] : webm;
   for (const type of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
   }
   return 'video/webm';
+}
+
+export function extForMimeType(mimeType: string): string {
+  return mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
 }
 
 /** Even dimensions keep every encoder happy. */
@@ -58,6 +76,7 @@ export class ScreenRecorder {
   private audioTracks: MediaStreamTrack[] = [];
   private audioContext: AudioContext | null = null;
   private hasAudio = false;
+  private ext = 'webm';
   private startedAt = 0;
   private thumbUrl = '';
   private outWidth = 0;
@@ -170,8 +189,14 @@ export class ScreenRecorder {
       ...(audioTrack ? [audioTrack] : []),
     ]);
 
+    const mimeType = pickMimeType(this.hasAudio, options.format);
+    this.ext = extForMimeType(mimeType);
+    if (options.format === 'mp4' && this.ext !== 'mp4') {
+      warnings.push('MP4 is not available on this machine, the recording is WebM.');
+    }
+
     const recorder = new MediaRecorder(output, {
-      mimeType: pickMimeType(this.hasAudio),
+      mimeType,
       videoBitsPerSecond: options.bitrate,
       audioBitsPerSecond: 96000,
     });
@@ -202,6 +227,7 @@ export class ScreenRecorder {
       durationMs,
       thumbUrl: this.thumbUrl,
       hasAudio: this.hasAudio,
+      ext: this.ext,
     };
     this.cleanup();
     return result;

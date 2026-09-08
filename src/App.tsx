@@ -16,7 +16,7 @@ import { buildPdf } from './lib/pdf';
 import { ScreenRecorder } from './lib/recorder';
 import { mergeShortcuts } from './lib/shortcuts';
 import { loadSetting, saveSetting } from './lib/storage';
-import type { AudioSource, Rect, ShortcutMap, Shot, SourceInfo } from './types';
+import type { AudioSource, Rect, ShortcutMap, Shot, SourceInfo, VideoFormat } from './types';
 
 type RegionPurpose = 'shot' | 'record';
 
@@ -35,6 +35,11 @@ const QUALITY = {
 type QualityKey = keyof typeof QUALITY;
 
 type Theme = 'dark' | 'light';
+
+const FORMAT_OPTIONS: { id: VideoFormat; label: string }[] = [
+  { id: 'mp4', label: 'MP4 (H.264, plays everywhere)' },
+  { id: 'webm', label: 'WebM (VP9, smaller files)' },
+];
 
 const AUDIO_OPTIONS: { id: AudioSource; label: string }[] = [
   { id: 'none', label: 'No audio' },
@@ -61,6 +66,9 @@ export default function App() {
   const [quality, setQuality] = useState<QualityKey>(() => loadSetting('quality', 'medium'));
   const [audioSource, setAudioSource] = useState<AudioSource>(() =>
     loadSetting<AudioSource>('audioSource', 'none'),
+  );
+  const [videoFormat, setVideoFormat] = useState<VideoFormat>(() =>
+    loadSetting<VideoFormat>('videoFormat', 'mp4'),
   );
   const [hideOnCapture, setHideOnCapture] = useState<boolean>(() =>
     loadSetting('hideOnCapture', true),
@@ -99,6 +107,7 @@ export default function App() {
 
   useEffect(() => saveSetting('quality', quality), [quality]);
   useEffect(() => saveSetting('audioSource', audioSource), [audioSource]);
+  useEffect(() => saveSetting('videoFormat', videoFormat), [videoFormat]);
   useEffect(() => saveSetting('hideOnCapture', hideOnCapture), [hideOnCapture]);
   useEffect(() => saveSetting('clearAfterExport', clearAfterExport), [clearAfterExport]);
   useEffect(() => saveSetting('compressPdf', compressPdf), [compressPdf]);
@@ -192,6 +201,7 @@ export default function App() {
             bitrate: q.bitrate,
             scale: q.scale,
             audio: audioSource,
+            format: videoFormat,
           },
           () => {
             setStatus('The screen stream was interrupted.');
@@ -205,7 +215,7 @@ export default function App() {
         setStatus(`Could not start recording: ${String(err)}`);
       }
     },
-    [source, recording, quality, audioSource],
+    [source, recording, quality, audioSource, videoFormat],
   );
 
   const stopRecording = useCallback(async () => {
@@ -222,6 +232,7 @@ export default function App() {
           thumbUrl: result.thumbUrl,
           durationMs: result.durationMs,
           hasAudio: result.hasAudio,
+          ext: result.ext,
         }),
       );
       setStatus(`Recording saved, length ${formatDuration(result.durationMs)}.`);
@@ -326,6 +337,7 @@ export default function App() {
         durationMs: number;
         thumbUrl: string;
         name: string;
+        ext: string;
       },
     ) => {
       setShots((prev) =>
@@ -341,6 +353,7 @@ export default function App() {
             height: result.height,
             durationMs: result.durationMs,
             name: result.name,
+            ext: result.ext,
           };
         }),
       );
@@ -370,7 +383,7 @@ export default function App() {
           .filter((s) => s.kind === 'video')
           .map(async (s) => ({
             data: new Uint8Array(await s.blob.arrayBuffer()),
-            ext: 'webm',
+            ext: s.ext || 'webm',
           })),
       );
 
@@ -516,6 +529,20 @@ export default function App() {
               </button>
             </>
           )}
+          <label className="field">
+            <span>Format</span>
+            <select
+              value={videoFormat}
+              onChange={(e) => setVideoFormat(e.target.value as VideoFormat)}
+              disabled={recording}
+            >
+              {FORMAT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="field">
             <span>Audio</span>
             <select
