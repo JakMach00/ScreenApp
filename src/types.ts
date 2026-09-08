@@ -91,6 +91,12 @@ export interface ExportResult {
   dir: string;
   pdfPath: string;
   videoPaths: string[];
+  usedDefaultFolder: boolean;
+}
+
+export interface RevealResult {
+  ok: boolean;
+  error?: string;
 }
 
 export type ShortcutAction = 'capture' | 'region' | 'record' | 'export';
@@ -116,8 +122,10 @@ export interface ScreenAppApi {
     pdf: Uint8Array | null,
     videos: ExportVideo[],
     defaultName: string,
+    targetDir?: string | null,
   ) => Promise<ExportResult | null>;
-  reveal: (filePath: string) => Promise<boolean>;
+  chooseFolder: () => Promise<string | null>;
+  reveal: (filePath: string) => Promise<RevealResult>;
 }
 
 declare global {

@@ -199,20 +199,53 @@ ipcMain.handle('window:show', async (_event, force) => {
  * Writes the PDF and every recording into one folder chosen by the user.
  * Returns the folder path, or null when the dialog was cancelled.
  */
+/** Adds a counter to the file name rather than overwriting an existing export. */
+async function uniquePath(candidate) {
+  const dir = path.dirname(candidate);
+  const ext = path.extname(candidate);
+  const stem = path.basename(candidate, ext);
+  let attempt = candidate;
+  let counter = 2;
+  for (;;) {
+    try {
+      await fs.access(attempt);
+    } catch {
+      return attempt;
+    }
+    attempt = path.join(dir, `${stem} (${counter}).${ext.replace(/^\./, '')}`);
+    counter += 1;
+  }
+}
+
 ipcMain.handle('export:bundle', async (_event, payload) => {
-  const { pdf, videos, defaultName } = payload || {};
+  const { pdf, videos, defaultName, targetDir } = payload || {};
   if (!win) throw new Error('The application window is not available.');
 
-  const result = await dialog.showSaveDialog(win, {
-    title: 'Save documentation',
-    defaultPath: defaultName || 'documentation.pdf',
-    filters: [{ name: 'PDF', extensions: ['pdf'] }],
-  });
-  if (result.canceled || !result.filePath) return null;
+  let pdfPath = null;
 
-  const pdfPath = result.filePath.toLowerCase().endsWith('.pdf')
-    ? result.filePath
-    : `${result.filePath}.pdf`;
+  // A configured folder skips the dialog, but only while it is still usable.
+  if (targetDir) {
+    try {
+      const stat = await fs.stat(targetDir);
+      if (stat.isDirectory()) {
+        pdfPath = await uniquePath(path.join(targetDir, defaultName || 'documentation.pdf'));
+      }
+    } catch {
+      pdfPath = null;
+    }
+  }
+
+  if (!pdfPath) {
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save documentation',
+      defaultPath: defaultName || 'documentation.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    pdfPath = result.filePath.toLowerCase().endsWith('.pdf')
+      ? result.filePath
+      : `${result.filePath}.pdf`;
+  }
   const dir = path.dirname(pdfPath);
   const stem = path.basename(pdfPath, '.pdf');
 
@@ -222,12 +255,14 @@ ipcMain.handle('export:bundle', async (_event, payload) => {
   for (let i = 0; i < (videos || []).length; i += 1) {
     const video = videos[i];
     const ext = video.ext || 'webm';
-    const target = path.join(dir, `${stem}_recording_${String(i + 1).padStart(2, '0')}.${ext}`);
+    const target = await uniquePath(
+      path.join(dir, `${stem}_recording_${String(i + 1).padStart(2, '0')}.${ext}`),
+    );
     await fs.writeFile(target, Buffer.from(video.data));
     videoPaths.push(target);
   }
 
-  return { dir, pdfPath, videoPaths };
+  return { dir, pdfPath, videoPaths, usedDefaultFolder: Boolean(targetDir) };
 });
 
 function registerBindings(bindings) {
@@ -264,7 +299,36 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-ipcMain.handle('shell:reveal', async (_event, filePath) => {
-  if (filePath) shell.showItemInFolder(filePath);
-  return true;
+/**
+ * Opens the folder holding the exported files. shell.showItemInFolder returns
+ * nothing and fails silently on Windows, so openPath is used instead: it hands
+ * back an error string that can be shown to the user.
+ */
+ipcMain.handle('shell:reveal', async (_event, target) => {
+  if (!target) return { ok: false, error: 'No path to open.' };
+  const full = path.normalize(String(target));
+  let dir = full;
+  try {
+    const stat = await fs.stat(full);
+    if (!stat.isDirectory()) dir = path.dirname(full);
+  } catch {
+    dir = path.dirname(full);
+  }
+  try {
+    const error = await shell.openPath(dir);
+    return error ? { ok: false, error } : { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
+/** Folder picker for the optional default export location. */
+ipcMain.handle('dialog:choose-folder', async () => {
+  if (!win) return null;
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Choose the default save folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
 });

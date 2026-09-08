@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0
+
+- Fixed "Open output folder", which used `shell.showItemInFolder` and failed silently on
+  Windows. It now opens the folder through `shell.openPath` and reports any error.
+- Added an optional fixed export folder. It is off by default, so the save dialog keeps
+  appearing until the option is switched on and a folder is picked.
+- Exports no longer overwrite: a name already in use gets a counter.
+- If the chosen folder is unavailable, the export falls back to the dialog and says so.
+
 ## 1.0.0
 
 First public release.
@@ -40,6 +49,8 @@ First public release.
 - Recordings written as separate files next to the PDF, because embedding playable video in
   a PDF only works in Adobe Acrobat.
 - Optional clearing of the session after a successful export, remembered between runs.
+- Optional fixed export folder, off by default, which skips the save dialog while it is set.
+- Exports never overwrite: a name already in use gets a counter.
 
 ### Interface and shortcuts
 

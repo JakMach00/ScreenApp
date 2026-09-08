@@ -47,6 +47,8 @@ export default function App() {
   const [status, setStatus] = useState<string>('Ready.');
   const [busy, setBusy] = useState(false);
   const [lastDir, setLastDir] = useState<string | null>(null);
+  const [saveDir, setSaveDir] = useState<string | null>(() => loadSetting<string | null>('saveDir', null));
+  const [useSaveDir, setUseSaveDir] = useState<boolean>(() => loadSetting('useSaveDir', false));
 
   const [quality, setQuality] = useState<QualityKey>(() => loadSetting('quality', 'medium'));
   const [hideOnCapture, setHideOnCapture] = useState<boolean>(() =>
@@ -84,6 +86,8 @@ export default function App() {
   useEffect(() => saveSetting('hideOnCapture', hideOnCapture), [hideOnCapture]);
   useEffect(() => saveSetting('clearAfterExport', clearAfterExport), [clearAfterExport]);
   useEffect(() => saveSetting('compressPdf', compressPdf), [compressPdf]);
+  useEffect(() => saveSetting('saveDir', saveDir), [saveDir]);
+  useEffect(() => saveSetting('useSaveDir', useSaveDir), [useSaveDir]);
 
   useEffect(() => {
     window.api
@@ -276,6 +280,23 @@ export default function App() {
     [],
   );
 
+  const chooseSaveDir = useCallback(async () => {
+    const picked = await window.api.chooseFolder();
+    if (picked) {
+      setSaveDir(picked);
+      setUseSaveDir(true);
+      setStatus(`Exports will go to ${picked}.`);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const openOutputFolder = useCallback(async () => {
+    if (!lastDir) return;
+    const result = await window.api.reveal(lastDir);
+    if (!result.ok) setStatus(`Could not open the folder: ${result.error ?? 'unknown error'}`);
+  }, [lastDir]);
+
   const exportAll = useCallback(async () => {
     if (shots.length === 0) {
       setStatus('There is nothing to export.');
@@ -302,14 +323,23 @@ export default function App() {
           })),
       );
 
-      const result = await window.api.exportBundle(pdf, videos, `documentation_${stamp()}.pdf`);
+      const target = useSaveDir ? saveDir : null;
+      const result = await window.api.exportBundle(
+        pdf,
+        videos,
+        `documentation_${stamp()}.pdf`,
+        target,
+      );
       if (!result) {
         setStatus('Export cancelled.');
         return;
       }
       setLastDir(result.pdfPath || result.dir);
       setStatus(
-        `Saved: ${result.pdfPath}${result.videoPaths.length ? ` and ${result.videoPaths.length} recording(s).` : '.'}`,
+        `Saved: ${result.pdfPath}${result.videoPaths.length ? ` and ${result.videoPaths.length} recording(s).` : '.'}` +
+          (useSaveDir && !result.usedDefaultFolder
+            ? ' The chosen folder was unavailable, so the dialog was used.'
+            : ''),
       );
       if (clearAfterExport) {
         setShots((prev) => {
@@ -322,7 +352,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [shots, compressPdf, clearAfterExport]);
+  }, [shots, compressPdf, clearAfterExport, useSaveDir, saveDir]);
 
   useEffect(() => {
     saveSetting('shortcuts.v2', shortcuts);
@@ -469,13 +499,36 @@ export default function App() {
             />
             Compress images in the PDF
           </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={useSaveDir}
+              onChange={(e) => {
+                if (!e.target.checked) {
+                  setUseSaveDir(false);
+                  return;
+                }
+                if (saveDir) setUseSaveDir(true);
+                else void chooseSaveDir();
+              }}
+            />
+            Always use one folder
+          </label>
+          {useSaveDir ? (
+            <div className="folder-row">
+              <span className="folder-path" title={saveDir ?? ''}>
+                {saveDir ?? 'No folder selected'}
+              </span>
+              <button onClick={() => void chooseSaveDir()}>Change</button>
+            </div>
+          ) : null}
           <button className="primary" onClick={() => void exportAll()} disabled={busy}>
             <span>Save PDF and recordings</span>
             {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
           </button>
           {lastDir ? (
-            <button className="link" onClick={() => void window.api.reveal(lastDir)}>
-              Show in folder
+            <button className="link" onClick={() => void openOutputFolder()}>
+              Open output folder
             </button>
           ) : null}
         </section>
