@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.0
+
+Interface only, no change to capture, recording, export, shortcuts or IPC.
+
+- Split the window into a title bar, sidebar, workspace and status bar, with the sidebar and the
+  workspace scrolling independently.
+- Grouped the sidebar into Source, Capture, Recording, Output, Export and Utilities, numbered by
+  a CSS counter so the mode switch cannot put the numbers out of order.
+- Added a Screenshot and Record switch that reorders the sidebar and changes the primary action
+  without hiding any control.
+- Reworked the empty workspace: what to do next, the primary action with its shortcut, and the
+  display, audio and quality currently in use.
+- Moved to a single lime accent used only for the primary action, active states and positive
+  status, with consistent button heights and visible hover, focus, disabled and checked states.
+- Replaced the native confirm on Delete all with an in-app dialog that says what will be removed.
+
 ## 1.6.0
 
 - Checks GitHub at startup for a newer release and offers a link to the release page. Nothing is

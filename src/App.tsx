@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor';
 import Gallery from './components/Gallery';
+import ConfirmDialog from './components/ConfirmDialog';
 import Hint from './components/Hint';
 import RegionSelector from './components/RegionSelector';
 import VideoPlayer from './components/VideoPlayer';
@@ -44,6 +45,9 @@ const QUALITY = {
 type QualityKey = keyof typeof QUALITY;
 
 type Theme = 'dark' | 'light';
+
+/** Which action the workspace and the sidebar put first. */
+type Mode = 'screenshot' | 'record';
 
 const FORMAT_OPTIONS: { id: VideoFormat; label: string }[] = [
   { id: 'mp4', label: 'MP4 (H.264, plays everywhere)' },
@@ -98,6 +102,8 @@ export default function App() {
   );
   const [failedShortcuts, setFailedShortcuts] = useState<string[]>([]);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [mode, setMode] = useState<Mode>(() => loadSetting<Mode>('mode', 'screenshot'));
   const [theme, setTheme] = useState<Theme>(() =>
     loadSetting<Theme>('theme', window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'),
   );
@@ -126,6 +132,7 @@ export default function App() {
   useEffect(() => saveSetting('audioSource', audioSource), [audioSource]);
   useEffect(() => saveSetting('videoFormat', videoFormat), [videoFormat]);
   useEffect(() => saveSetting('checkOnStart', checkOnStart), [checkOnStart]);
+  useEffect(() => saveSetting('mode', mode), [mode]);
   useEffect(() => saveSetting('dismissedVersion', dismissedVersion), [dismissedVersion]);
   useEffect(() => saveSetting('hideOnCapture', hideOnCapture), [hideOnCapture]);
   useEffect(() => saveSetting('clearAfterExport', clearAfterExport), [clearAfterExport]);
@@ -345,12 +352,11 @@ export default function App() {
   }, []);
 
   const deleteAll = useCallback(() => {
-    if (shotsRef.current.length === 0) return;
-    if (!window.confirm('Delete every screenshot and recording?')) return;
     setShots((prev) => {
       prev.forEach((s) => URL.revokeObjectURL(s.url));
       return [];
     });
+    setConfirmClear(false);
     setStatus('Session cleared.');
   }, []);
 
@@ -567,265 +573,393 @@ export default function App() {
 
   const editing = editorPos !== null ? images[editorPos] ?? null : null;
 
+  const videoCount = shots.length - images.length;
+  const canExport = shots.length > 0;
+  const exportLabel = images.length === 0 ? 'Save recordings' : 'Save PDF and recordings';
+  const runExport = images.length === 0 ? exportVideos : exportAll;
+  const activeQuality = QUALITY[quality].label;
+  const activeAudio = AUDIO_OPTIONS.find((o) => o.id === audioSource)?.label ?? 'No audio';
+
+  const captureSection = (
+    <section className="group" aria-label="Capture">
+      <h2> Capture
+      </h2>
+      <button
+        className={mode === 'screenshot' ? 'action primary' : 'action'}
+        onClick={() => void captureFull()}
+        disabled={busy}
+        aria-label="Capture full screen"
+      >
+        <span>Full screen</span>
+        {shortcuts.capture ? <kbd>{shortcuts.capture}</kbd> : null}
+      </button>
+      <button
+        className="action"
+        onClick={() => void openRegion('shot')}
+        disabled={busy}
+        aria-label="Capture a region"
+      >
+        <span>Selected region</span>
+        {shortcuts.region ? <kbd>{shortcuts.region}</kbd> : null}
+      </button>
+    </section>
+  );
+
+  const recordingSection = (
+    <section className="group" aria-label="Recording">
+      <h2> Recording
+      </h2>
+      {recording ? (
+        <button className="action danger" onClick={() => void stopRecording()}>
+          <span>
+            <span className="rec-dot" /> Stop {formatDuration(elapsed)}
+          </span>
+          {shortcuts.record ? <kbd>{shortcuts.record}</kbd> : null}
+        </button>
+      ) : (
+        <>
+          <button
+            className={mode === 'record' ? 'action primary' : 'action'}
+            onClick={() => void startRecording(null)}
+            disabled={busy}
+            aria-label="Record full screen"
+          >
+            <span>Full screen</span>
+            {shortcuts.record ? <kbd>{shortcuts.record}</kbd> : null}
+          </button>
+          <button
+            className="action"
+            onClick={() => void openRegion('record')}
+            disabled={busy}
+            aria-label="Record a region"
+          >
+            <span>Selected region</span>
+          </button>
+        </>
+      )}
+    </section>
+  );
+
   return (
     <div className="app">
-      <aside className="side">
-        <header className="brand">
-          <h1>ScreenApp</h1>
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <span className="brand-name">ScreenApp</span>
+        </div>
+        <div className="mode-switch" role="group" aria-label="Mode">
           <button
-            className="ghost"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title="Switch colour theme"
+            className={mode === 'screenshot' ? 'mode active' : 'mode'}
+            onClick={() => setMode('screenshot')}
+            aria-pressed={mode === 'screenshot'}
           >
-            {theme === 'dark' ? 'Light' : 'Dark'}
+            Screenshot
           </button>
-        </header>
-
-        <section className="group">
-          <h2>Source</h2>
-          <label className="field">
-            <span>Screen</span>
-            <select value={source?.id ?? ''} onChange={(e) => setSourceId(e.target.value)}>
-              {sources.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                  {s.primary ? ' (primary)' : ''} - {s.width} x {s.height}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Hint text="The window is hidden for a moment so it does not appear in the screenshot. It is left alone when it is minimized or sitting on another monitor, and it never takes focus back.">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={hideOnCapture}
-                onChange={(e) => setHideOnCapture(e.target.checked)}
-              />
-              Hide window while capturing
-            </label>
-          </Hint>
-        </section>
-
-        <section className="group">
-          <h2>Capture</h2>
-          <button onClick={() => void captureFull()} disabled={busy}>
-            <span>Whole screen</span>
-            {shortcuts.capture ? <kbd>{shortcuts.capture}</kbd> : null}
-          </button>
-          <button onClick={() => void openRegion('shot')} disabled={busy}>
-            <span>Region</span>
-            {shortcuts.region ? <kbd>{shortcuts.region}</kbd> : null}
-          </button>
-        </section>
-
-        <section className="group">
-          <h2>Recording</h2>
-          {recording ? (
-            <button className="danger" onClick={() => void stopRecording()}>
-              <span>
-                <span className="rec-dot" /> Stop ({formatDuration(elapsed)})
-              </span>
-              {shortcuts.record ? <kbd>{shortcuts.record}</kbd> : null}
-            </button>
-          ) : (
-            <>
-              <button onClick={() => void startRecording(null)} disabled={busy}>
-                <span>Record whole screen</span>
-                {shortcuts.record ? <kbd>{shortcuts.record}</kbd> : null}
-              </button>
-              <button onClick={() => void openRegion('record')} disabled={busy}>
-                <span>Record region</span>
-              </button>
-            </>
-          )}
-          <Hint text="MP4 uses H.264 and opens in Windows Media Player Legacy. WebM uses VP9, giving noticeably smaller files, but older players cannot read it.">
-          <label className="field">
-            <span>Format</span>
-            <select
-              value={videoFormat}
-              onChange={(e) => setVideoFormat(e.target.value as VideoFormat)}
-              disabled={recording}
-            >
-              {FORMAT_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          </Hint>
-          <Hint text="Microphone records the Windows default input, system audio records what the machine is playing. If a source is unavailable the recording continues silently and says why.">
-          <label className="field">
-            <span>Audio</span>
-            <select
-              value={audioSource}
-              onChange={(e) => setAudioSource(e.target.value as AudioSource)}
-              disabled={recording}
-            >
-              {AUDIO_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          </Hint>
-          <Hint text="Sets frame rate, bitrate and scale together. Low is about 3 to 4 MB per minute at 1080p and is enough for defect documentation, High keeps small text sharp.">
-          <label className="field">
-            <span>Quality</span>
-            <select
-              value={quality}
-              onChange={(e) => setQuality(e.target.value as QualityKey)}
-              disabled={recording}
-            >
-              {(Object.keys(QUALITY) as QualityKey[]).map((key) => (
-                <option key={key} value={key}>
-                  {QUALITY[key].label}
-                </option>
-              ))}
-            </select>
-          </label>
-          </Hint>
-        </section>
-
-        <section className="group">
-          <h2>Export</h2>
-          <Hint text="After a successful export the gallery is emptied, so the next task starts clean. Leave it off to keep the material and delete it yourself.">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={clearAfterExport}
-                onChange={(e) => setClearAfterExport(e.target.checked)}
-              />
-              Clear after saving the PDF
-            </label>
-          </Hint>
-          <Hint text="Screenshots go into the PDF as JPEG instead of PNG. The file gets much smaller, at the cost of slightly softer text. Turn it off when the document has to stay pixel exact.">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={compressPdf}
-                onChange={(e) => setCompressPdf(e.target.checked)}
-              />
-              Compress images in the PDF
-            </label>
-          </Hint>
-          <Hint text="Exports go straight to a folder you pick once, with no save dialog. Files are never overwritten, a repeated name gets a counter.">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={useSaveDir}
-                onChange={(e) => {
-                  if (!e.target.checked) {
-                    setUseSaveDir(false);
-                    return;
-                  }
-                  if (saveDir) setUseSaveDir(true);
-                  else void chooseSaveDir();
-                }}
-              />
-              Always use one folder
-            </label>
-          </Hint>
-          {useSaveDir ? (
-            <div className="folder-row">
-              <span className="folder-path" title={saveDir ?? ''}>
-                {saveDir ?? 'No folder selected'}
-              </span>
-              <button onClick={() => void chooseSaveDir()}>Change</button>
-            </div>
-          ) : null}
-          {images.length === 0 ? (
-            <button
-              className="primary"
-              onClick={() => void exportVideos()}
-              disabled={busy || shots.length - images.length === 0}
-            >
-              <span>Save recordings</span>
-              {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
-            </button>
-          ) : (
-            <>
-              <button className="primary" onClick={() => void exportAll()} disabled={busy}>
-                <span>Save PDF and recordings</span>
-                {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
-              </button>
-              {shots.length - images.length > 0 ? (
-                <Hint text="Writes the recordings on their own into a folder you choose, with no PDF. Useful when a clip is worth sending on its own while the screenshots are still work in progress.">
-                  <button onClick={() => void exportVideos()} disabled={busy}>
-                    <span>Save recordings only</span>
-                  </button>
-                </Hint>
-              ) : null}
-            </>
-          )}
-          {lastDir ? (
-            <button className="link" onClick={() => void openOutputFolder()}>
-              Open output folder
-            </button>
-          ) : null}
-        </section>
-
-        <footer className="side-foot">
-          <button className="ghost" onClick={() => setShowShortcuts(true)}>
-            Keyboard shortcuts
-          </button>
-          <button className="ghost" onClick={() => void checkForUpdate(true)}>
-            Check for updates
-          </button>
-          <Hint text="Asks GitHub once at startup whether a newer release exists. Nothing is downloaded or installed, you get a link to the release page. Turn it off to make no network requests at all.">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={checkOnStart}
-                onChange={(e) => setCheckOnStart(e.target.checked)}
-              />
-              Check on startup
-            </label>
-          </Hint>
-        </footer>
-      </aside>
-
-      <main className="main">
-        {update && update.newer && update.latest && update.latest !== dismissedVersion ? (
-          <div className="update-bar">
-            <span>
-              Version {update.latest} is available, this is {update.current}.
-            </span>
-            <span className="spacer" />
-            <button
-              className="primary"
-              onClick={() => void window.api.openRelease(update.url ?? '')}
-            >
-              Open release page
-            </button>
-            <button onClick={() => setDismissedVersion(update.latest ?? null)}>Dismiss</button>
-          </div>
-        ) : null}
-
-        <div className="gallery-head">
-          <span>
-            {images.length} screenshots, {shots.length - images.length} recordings
-          </span>
-          {recording ? (
-            <span className="rec-live">
-              <span className="rec-dot" />
-              Recording {formatDuration(elapsed)}
-            </span>
-          ) : null}
-          <span className="spacer" />
-          <button onClick={deleteAll} disabled={shots.length === 0}>
-            Delete all
+          <button
+            className={mode === 'record' ? 'mode active' : 'mode'}
+            onClick={() => setMode('record')}
+            aria-pressed={mode === 'record'}
+          >
+            Record
           </button>
         </div>
+        <span className="spacer" />
+        {recording ? (
+          <span className="rec-live">
+            <span className="rec-dot" />
+            Recording {formatDuration(elapsed)}
+          </span>
+        ) : null}
+        <button className="ghost" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </button>
+      </header>
 
-        <Gallery shots={shots} onOpen={openShot} onDelete={deleteShot} />
+      <div className="body">
+        <aside className="side">
+          <section className="group" aria-label="Source">
+            <h2> Source
+            </h2>
+            <Hint text="The screen every capture and recording is taken from. The list rebuilds itself when a display changes resolution or is plugged in.">
+              <label className="field">
+                <span>Display</span>
+                <select value={source?.id ?? ''} onChange={(e) => setSourceId(e.target.value)}>
+                  {sources.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                      {s.primary ? ' (primary)' : ''} - {s.width} x {s.height}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </Hint>
+            <Hint text="The window is hidden for a moment so it does not appear in the screenshot. It is left alone when it is minimized or sitting on another monitor, and it never takes focus back.">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={hideOnCapture}
+                  onChange={(e) => setHideOnCapture(e.target.checked)}
+                />
+                Hide ScreenApp while capturing
+              </label>
+            </Hint>
+          </section>
 
-        <footer className={busy ? 'status busy' : 'status'}>
-          <span className="status-text">{status}</span>
-          <span className="version">v{__APP_VERSION__}</span>
-        </footer>
-      </main>
+          {mode === 'screenshot' ? (
+            <>
+              {captureSection}
+              {recordingSection}
+            </>
+          ) : (
+            <>
+              {recordingSection}
+              {captureSection}
+            </>
+          )}
+
+          <section className="group" aria-label="Output">
+            <h2> Output
+            </h2>
+            <Hint text="MP4 uses H.264 and opens in Windows Media Player Legacy. WebM uses VP9, giving noticeably smaller files, but older players cannot read it.">
+              <label className="field">
+                <span>Format</span>
+                <select
+                  value={videoFormat}
+                  onChange={(e) => setVideoFormat(e.target.value as VideoFormat)}
+                  disabled={recording}
+                >
+                  {FORMAT_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </Hint>
+            <Hint text="Microphone records the Windows default input, system audio records what the machine is playing. If a source is unavailable the recording continues silently and says why.">
+              <label className="field">
+                <span>Audio</span>
+                <select
+                  value={audioSource}
+                  onChange={(e) => setAudioSource(e.target.value as AudioSource)}
+                  disabled={recording}
+                >
+                  {AUDIO_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </Hint>
+            <Hint text="Sets frame rate, bitrate and scale together. Low is about 3 to 4 MB per minute at 1080p and is enough for defect documentation, High keeps small text sharp.">
+              <label className="field">
+                <span>Quality</span>
+                <select
+                  value={quality}
+                  onChange={(e) => setQuality(e.target.value as QualityKey)}
+                  disabled={recording}
+                >
+                  {(Object.keys(QUALITY) as QualityKey[]).map((key) => (
+                    <option key={key} value={key}>
+                      {QUALITY[key].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </Hint>
+          </section>
+
+          <section className="group" aria-label="Export">
+            <h2> Export
+            </h2>
+            <Hint text="After a successful export the gallery is emptied, so the next task starts clean. Leave it off to keep the material and delete it yourself.">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={clearAfterExport}
+                  onChange={(e) => setClearAfterExport(e.target.checked)}
+                />
+                Clear after saving the PDF
+              </label>
+            </Hint>
+            <Hint text="Screenshots go into the PDF as JPEG instead of PNG. The file gets much smaller, at the cost of slightly softer text. Turn it off when the document has to stay pixel exact.">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={compressPdf}
+                  onChange={(e) => setCompressPdf(e.target.checked)}
+                />
+                Compress images in the PDF
+              </label>
+            </Hint>
+            <Hint text="Exports go straight to a folder you pick once, with no save dialog. Files are never overwritten, a repeated name gets a counter.">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={useSaveDir}
+                  onChange={(e) => {
+                    if (!e.target.checked) {
+                      setUseSaveDir(false);
+                      return;
+                    }
+                    if (saveDir) setUseSaveDir(true);
+                    else void chooseSaveDir();
+                  }}
+                />
+                Always use one folder
+              </label>
+            </Hint>
+            {useSaveDir ? (
+              <div className="folder-row">
+                <span className="folder-path" title={saveDir ?? ''}>
+                  {saveDir ?? 'No folder selected'}
+                </span>
+                <button onClick={() => void chooseSaveDir()}>Change</button>
+              </div>
+            ) : null}
+            <button
+              className="action primary"
+              onClick={() => void runExport()}
+              disabled={busy || !canExport}
+            >
+              <span>{exportLabel}</span>
+              {shortcuts.export ? <kbd>{shortcuts.export}</kbd> : null}
+            </button>
+            {images.length > 0 && videoCount > 0 ? (
+              <Hint text="Writes the recordings on their own into a folder you choose, with no PDF. Useful when a clip is worth sending on before the screenshots are finished.">
+                <button className="action" onClick={() => void exportVideos()} disabled={busy}>
+                  <span>Save recordings only</span>
+                </button>
+              </Hint>
+            ) : null}
+            {lastDir ? (
+              <button className="link" onClick={() => void openOutputFolder()}>
+                Open output folder
+              </button>
+            ) : null}
+          </section>
+
+          <section className="group" aria-label="Utilities">
+            <h2> Utilities
+            </h2>
+            <button className="action" onClick={() => setShowShortcuts(true)}>
+              <span>Keyboard shortcuts</span>
+            </button>
+            <button className="action" onClick={() => void checkForUpdate(true)}>
+              <span>Check for updates</span>
+            </button>
+            <Hint text="Asks GitHub once at startup whether a newer release exists. Nothing is downloaded or installed, you get a link to the release page. Turn it off to make no network requests at all.">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={checkOnStart}
+                  onChange={(e) => setCheckOnStart(e.target.checked)}
+                />
+                Check on startup
+              </label>
+            </Hint>
+            <p className="side-note">Everything stays on this device until you export it.</p>
+          </section>
+        </aside>
+
+        <main className="workspace">
+          {update && update.newer && update.latest && update.latest !== dismissedVersion ? (
+            <div className="update-bar">
+              <span>
+                Version {update.latest} is available, this is {update.current}.
+              </span>
+              <span className="spacer" />
+              <button
+                className="primary"
+                onClick={() => void window.api.openRelease(update.url ?? '')}
+              >
+                Open release page
+              </button>
+              <button onClick={() => setDismissedVersion(update.latest ?? null)}>Dismiss</button>
+            </div>
+          ) : null}
+
+          <div className="workspace-head">
+            <span className="counts">
+              {images.length} screenshots
+              <span className="dot-sep" />
+              {videoCount} recordings
+            </span>
+            <span className="spacer" />
+            <button onClick={() => setConfirmClear(true)} disabled={!canExport}>
+              Delete all
+            </button>
+          </div>
+
+          {shots.length === 0 ? (
+            <div className="empty-state">
+              <svg className="empty-mark" viewBox="0 0 64 64" aria-hidden="true">
+                <rect
+                  x="6"
+                  y="14"
+                  width="38"
+                  height="36"
+                  rx="6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                />
+                <path
+                  d="M48 26l10-6v24l-10-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                />
+                <circle cx="25" cy="32" r="6" fill="currentColor" />
+              </svg>
+              <h3>Nothing captured yet</h3>
+              <p>
+                {mode === 'screenshot'
+                  ? 'Pick a display on the left, then capture the whole screen or a region.'
+                  : 'Pick a display on the left, then record the whole screen or a region.'}
+              </p>
+              <button
+                className="action primary wide"
+                onClick={() =>
+                  mode === 'screenshot' ? void captureFull() : void startRecording(null)
+                }
+                disabled={busy || recording}
+              >
+                <span>{mode === 'screenshot' ? 'Capture full screen' : 'Record full screen'}</span>
+                <kbd>{mode === 'screenshot' ? shortcuts.capture : shortcuts.record}</kbd>
+              </button>
+              <p className="empty-meta">
+                {source ? `${source.name} ${source.width} x ${source.height}` : 'No display found'}
+                <span className="dot-sep" />
+                {activeAudio}
+                <span className="dot-sep" />
+                {activeQuality}
+              </p>
+            </div>
+          ) : (
+            <Gallery shots={shots} onOpen={openShot} onDelete={deleteShot} />
+          )}
+        </main>
+      </div>
+
+      <footer className={busy ? 'statusbar busy' : 'statusbar'}>
+        <span className={recording ? 'state-dot recording' : 'state-dot'} />
+        <span className="status-text">{status}</span>
+        <span className="version">v{__APP_VERSION__}</span>
+      </footer>
+
+      {confirmClear ? (
+        <ConfirmDialog
+          title="Delete everything"
+          message={`This removes ${images.length} screenshot(s) and ${videoCount} recording(s) from the session. Anything already exported to disk is untouched.`}
+          confirmLabel="Delete all"
+          destructive
+          onConfirm={deleteAll}
+          onCancel={() => setConfirmClear(false)}
+        />
+      ) : null}
 
       {frozen ? (
         <RegionSelector

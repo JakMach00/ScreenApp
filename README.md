@@ -155,6 +155,25 @@ which is what you want when a recording made during a screenshot session is wort
 before the rest of the documentation is finished. That path keeps the clip's own file name,
 while a full export names the recordings after the PDF so they stay grouped.
 
+## Interface
+
+The window splits into four fixed areas: a title bar with the Screenshot and Record switch, a
+sidebar of settings, the workspace, and a status bar carrying the last action and the running
+version. Only the sidebar and the workspace scroll, and they scroll independently, so the status
+bar and the primary actions stay reachable at 1024 x 768.
+
+The sidebar is grouped into Source, Capture, Recording, Output, Export and Utilities. Section
+numbers come from a CSS counter rather than being written into the markup, because the mode
+switch reorders Capture and Recording and hardcoded numbers would end up out of sequence.
+
+The mode switch changes which action is emphasized and which section comes first, and it changes
+the primary button in the empty workspace. It hides nothing: every capture and recording control
+stays visible in both modes.
+
+One accent colour is used, and only for the primary action of the current mode, active states
+and positive status. Everything else is border and text weight, so there is never a question
+about which button is the main one.
+
 ## Update check
 
 At startup the application asks the GitHub API whether `JakMach00/ScreenApp` has a newer
