@@ -6,8 +6,9 @@ interface Props {
   children: ReactNode;
 }
 
-const DELAY_MS = 2000;
+const DELAY_MS = 1000;
 const TIP_WIDTH = 260;
+const TIP_GAP = 12;
 
 /**
  * Explains a control after a deliberate pause. The delay keeps the tooltip out
@@ -24,16 +25,31 @@ export default function Hint({ text, children }: Props) {
   // The anchor uses display: contents so it does not disturb the sidebar
   // layout, which means it generates no box of its own. Bubbling mouseover and
   // mouseout are therefore used rather than enter and leave.
-  const handleOver = () => {
+  const handleOver = (event: React.MouseEvent) => {
     if (position || timerRef.current) return;
+    // The anchor itself uses display: contents and therefore has no box of its
+    // own, so measuring it would return zeros and pin the tooltip to the top
+    // left corner. The hovered control is measured instead.
+    const hovered = (event.target as HTMLElement | null)?.closest(
+      'label, button, select, .field, .check',
+    ) as HTMLElement | null;
+    const element = hovered ?? (anchorRef.current?.firstElementChild as HTMLElement | null);
+    if (!element) return;
+
     timerRef.current = window.setTimeout(() => {
       timerRef.current = 0;
-      const box = anchorRef.current?.getBoundingClientRect();
-      if (!box) return;
-      const overflowsRight = box.right + TIP_WIDTH + 24 > window.innerWidth;
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) return;
+      const overflowsRight = box.right + TIP_WIDTH + TIP_GAP * 2 > window.innerWidth;
+      const top = Math.max(
+        8,
+        Math.min(box.top + box.height / 2 - 28, window.innerHeight - 140),
+      );
       setPosition({
-        top: Math.min(box.top, window.innerHeight - 120),
-        left: overflowsRight ? Math.max(8, box.left - TIP_WIDTH - 12) : box.right + 12,
+        top,
+        left: overflowsRight
+          ? Math.max(8, box.left - TIP_WIDTH - TIP_GAP)
+          : box.right + TIP_GAP,
       });
     }, DELAY_MS);
   };

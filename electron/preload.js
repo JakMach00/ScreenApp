@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('api', {
   applyShortcuts: (bindings) => ipcRenderer.invoke('shortcuts:apply', bindings),
   suspendShortcuts: () => ipcRenderer.invoke('shortcuts:suspend'),
   resumeShortcuts: () => ipcRenderer.invoke('shortcuts:resume'),
+  onDisplaysChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('displays:changed', listener);
+    return () => ipcRenderer.removeListener('displays:changed', listener);
+  },
   onShortcut: (callback) => {
     const listener = (_event, action) => callback(action);
     ipcRenderer.on('shortcut:trigger', listener);
@@ -28,4 +33,6 @@ contextBridge.exposeInMainWorld('api', {
     }),
   chooseFolder: () => ipcRenderer.invoke('dialog:choose-folder'),
   reveal: (filePath) => ipcRenderer.invoke('shell:reveal', filePath),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  openRelease: (url) => ipcRenderer.invoke('update:open', url),
 });

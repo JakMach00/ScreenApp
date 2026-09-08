@@ -1,9 +1,8 @@
 import { jsPDF } from 'jspdf';
 import type { Shot } from '../types';
-import { formatDuration, loadImage } from './capture';
+import { loadImage } from './capture';
 
 const MARGIN = 36; // points
-const HEADER = 18;
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -36,16 +35,14 @@ export interface PdfOptions {
   title: string;
   /** Re-encode screenshots as JPEG to keep the PDF small. */
   compress: boolean;
-  /** Add one page per recording with a poster frame and the file name. */
-  includeVideoPages: boolean;
 }
 
 export async function buildPdf(shots: Shot[], options: PdfOptions): Promise<Uint8Array> {
-  const images = shots.filter((s) => s.kind === 'image');
-  const videos = shots.filter((s) => s.kind === 'video');
-  const pages: Shot[] = options.includeVideoPages ? [...images, ...videos] : images;
+  // Screenshots only. Recordings are exported as their own files, and the
+  // pages carry no headers or timestamps so the document is just the images.
+  const pages = shots.filter((s) => s.kind === 'image');
 
-  if (pages.length === 0) throw new Error('There is nothing to put in the PDF.');
+  if (pages.length === 0) throw new Error('There are no screenshots to put in the PDF.');
 
   const firstLandscape = pages[0].width >= pages[0].height;
   const doc = new jsPDF({
@@ -63,42 +60,20 @@ export async function buildPdf(shots: Shot[], options: PdfOptions): Promise<Uint
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const availW = pageW - MARGIN * 2;
-    const availH = pageH - MARGIN * 2 - HEADER;
+    const availH = pageH - MARGIN * 2;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(90);
-    const when = new Date(shot.createdAt).toLocaleString();
-    doc.text(`${i + 1}. ${shot.name}`, MARGIN, MARGIN);
-    doc.text(when, pageW - MARGIN, MARGIN, { align: 'right' });
-
-    const dataUrl =
-      shot.kind === 'image'
-        ? options.compress
-          ? await toJpeg(shot.blob, 0.85)
-          : await blobToDataUrl(shot.blob)
-        : shot.thumbUrl;
+    const dataUrl = options.compress
+      ? await toJpeg(shot.blob, 0.85)
+      : await blobToDataUrl(shot.blob);
     const format = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
 
     const ratio = Math.min(availW / shot.width, availH / shot.height);
     const drawW = shot.width * ratio;
     const drawH = shot.height * ratio;
     const x = MARGIN + (availW - drawW) / 2;
-    const y = MARGIN + HEADER;
+    const y = MARGIN + (availH - drawH) / 2;
 
     doc.addImage(dataUrl, format, x, y, drawW, drawH, undefined, 'FAST');
-    doc.setDrawColor(200);
-    doc.rect(x, y, drawW, drawH);
-
-    if (shot.kind === 'video') {
-      doc.setFontSize(10);
-      doc.setTextColor(40);
-      doc.text(
-        `Screen recording, length ${formatDuration(shot.durationMs)}. The video file is saved next to this PDF.`,
-        MARGIN,
-        Math.min(pageH - MARGIN / 2, y + drawH + 18),
-      );
-    }
   }
 
   doc.setProperties({ title: options.title, creator: 'ScreenApp' });

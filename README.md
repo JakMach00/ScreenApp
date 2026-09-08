@@ -66,9 +66,10 @@ setting, the toggle sits in the top right of the sidebar, and the pick is rememb
   recording goes through a canvas and `canvas.captureStream()`.
 - **Recording size**: `MediaRecorder` with VP9 (VP8 fallback) and an explicit bitrate. The "Low"
   profile is 500 kbps, 10 fps and 0.6 scale, roughly 3 to 4 MB per minute on a 1080p screen.
-- **PDF**: jsPDF, one page per screenshot, orientation derived from the image aspect ratio,
-  header with the file name and timestamp. Every recording gets a page with its first frame and
-  its length, while the video file itself is written next to the PDF.
+- **PDF**: jsPDF, one page per screenshot, orientation derived from the image aspect ratio.
+  Pages carry the image and nothing else, no file names and no timestamps, so the document is
+  exactly what was captured. Recordings never enter the PDF, they are exported as their own
+  files.
 
 ## Known limits
 
@@ -147,12 +148,35 @@ and the status bar will say so.
 ## Exporting
 
 The primary export writes a PDF of the screenshots plus every recording as separate files next
-to it. With no screenshots in the gallery there is nothing to document, so the button becomes
+to it. The PDF holds screenshots only. With no screenshots in the gallery there is nothing to document, so the button becomes
 "Save recordings" and skips the PDF entirely, asking for a folder rather than a document name.
 When screenshots and recordings sit side by side, "Save recordings only" writes just the clips,
 which is what you want when a recording made during a screenshot session is worth sending on
 before the rest of the documentation is finished. That path keeps the clip's own file name,
 while a full export names the recordings after the PDF so they stay grouped.
+
+## Update check
+
+At startup the application asks the GitHub API whether `JakMach00/ScreenApp` has a newer
+published release, and shows a bar offering the release page when it does. Nothing is downloaded
+and nothing is installed: updating stays a manual unpack, which is the point, because installing
+an unsigned executable in the background is exactly the behaviour corporate security tooling
+blocks.
+
+The request runs in the main process through `net.fetch`, for two reasons. The renderer content
+policy allows no outside connections, and `net.fetch` follows the system proxy settings, which
+is often the only route out of a corporate network. It carries an eight second timeout and every
+failure, including a missing release, a rate limit or no network at all, is silent unless the
+check was started by hand.
+
+A dismissed version is remembered, so the same release is not announced at every launch. The
+check can be turned off entirely with "Check on startup", and "Check for updates" runs it on
+demand.
+
+Full automatic updates were deliberately left out. `electron-updater` on Windows needs an NSIS
+installer rather than a zip, and an unsigned application that downloads and runs executables
+would be a poor fit for a machine under corporate policy. If a code signing certificate ever
+appears, that is the moment to revisit it.
 
 ## Version number
 

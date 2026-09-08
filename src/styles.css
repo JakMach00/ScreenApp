@@ -104,6 +104,9 @@ body {
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
 .field {
@@ -242,10 +245,24 @@ kbd {
 /* ---------------- main ---------------- */
 
 .main {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   height: 100%;
+}
+
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  border-bottom: 1px solid var(--line);
+}
+
+.update-bar button {
+  padding: 5px 10px;
 }
 
 .gallery-head {
@@ -291,6 +308,8 @@ kbd {
 }
 
 .gallery {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   gap: 12px;

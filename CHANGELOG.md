@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0
+
+- Checks GitHub at startup for a newer release and offers a link to the release page. Nothing is
+  downloaded or installed.
+- The check runs through the main process so it follows system proxy settings, times out after
+  eight seconds, and stays silent on failure unless it was started by hand.
+- A dismissed version is not announced again, and the check can be switched off entirely.
+- Manual "Check for updates" button in the sidebar.
+- PDF pages now hold the screenshot and nothing else, with no file name and no timestamp header.
+- Recordings no longer produce PDF pages, they are exported as files only.
+- The screen list is rebuilt when a display changes resolution or is added or removed, instead
+  of staying stale until the next restart.
+- No sidebar button looks preselected on launch.
+- Tooltips appear after one second and next to the control rather than in the corner of the
+  screen.
+
 ## 1.5.0
 
 - Recordings can be exported without a PDF. With no screenshots the export button switches to

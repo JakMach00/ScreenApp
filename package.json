@@ -1,7 +1,7 @@
 {
   "name": "screenapp",
   "productName": "ScreenApp",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Screen capture, annotation and PDF documentation tool",
   "main": "electron/main.js",
   "author": "Jakub",

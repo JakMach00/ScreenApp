@@ -6,6 +6,7 @@ const {
   ipcMain,
   desktopCapturer,
   globalShortcut,
+  net,
   screen,
   session,
   dialog,
@@ -15,6 +16,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 
 const isDev = !app.isPackaged;
+const REPO = 'JakMach00/ScreenApp';
 const DEV_URL = 'http://localhost:5173';
 
 /** @type {BrowserWindow | null} */
@@ -99,6 +101,15 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === 'media' || permission === 'display-capture');
   });
+
+  const notifyDisplays = () => {
+    if (win && !win.isDestroyed()) win.webContents.send('displays:changed');
+  };
+  // Resolution changes, docking and unplugging a monitor all land here, so the
+  // renderer can refresh the screen list without a restart.
+  screen.on('display-metrics-changed', notifyDisplays);
+  screen.on('display-added', notifyDisplays);
+  screen.on('display-removed', notifyDisplays);
 
   createWindow();
   app.on('activate', () => {
@@ -349,6 +360,67 @@ app.on('will-quit', () => {
  * nothing and fails silently on Windows, so openPath is used instead: it hands
  * back an error string that can be shown to the user.
  */
+/** Numeric comparison, so 1.10.0 is correctly newer than 1.9.0. */
+function compareVersions(a, b) {
+  const left = String(a).split('.').map((part) => parseInt(part, 10) || 0);
+  const right = String(b).split('.').map((part) => parseInt(part, 10) || 0);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+/**
+ * Asks GitHub for the latest published release. This runs in the main process
+ * because the renderer content policy blocks outside requests, and because
+ * net.fetch follows the system proxy settings, which matters on a corporate
+ * network.
+ */
+ipcMain.handle('update:check', async () => {
+  const current = app.getVersion();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': `ScreenApp/${current}`,
+      },
+      signal: controller.signal,
+    });
+    if (response.status === 404) {
+      return { current, error: 'No published release was found.' };
+    }
+    if (!response.ok) {
+      return { current, error: `GitHub answered with status ${response.status}.` };
+    }
+    const data = await response.json();
+    const latest = String(data.tag_name || '').replace(/^v/i, '');
+    if (!latest) return { current, error: 'The latest release carries no version tag.' };
+    return {
+      current,
+      latest,
+      url: typeof data.html_url === 'string' ? data.html_url : '',
+      newer: compareVersions(latest, current) > 0,
+    };
+  } catch (err) {
+    const aborted = err && err.name === 'AbortError';
+    return { current, error: aborted ? 'The check timed out.' : String(err) };
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+/** Opens a release page, and only ever a page belonging to this project. */
+ipcMain.handle('update:open', async (_event, url) => {
+  const fallback = `https://github.com/${REPO}/releases/latest`;
+  const safe =
+    typeof url === 'string' && url.startsWith(`https://github.com/${REPO}`) ? url : fallback;
+  await shell.openExternal(safe);
+  return true;
+});
+
 ipcMain.handle('shell:reveal', async (_event, target) => {
   if (!target) return { ok: false, error: 'No path to open.' };
   const full = path.normalize(String(target));

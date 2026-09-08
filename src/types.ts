@@ -105,6 +105,14 @@ export interface ExportResult {
   usedDefaultFolder: boolean;
 }
 
+export interface UpdateInfo {
+  current: string;
+  latest?: string;
+  url?: string;
+  newer?: boolean;
+  error?: string;
+}
+
 export interface RevealResult {
   ok: boolean;
   error?: string;
@@ -130,6 +138,7 @@ export interface ScreenAppApi {
   suspendShortcuts: () => Promise<boolean>;
   resumeShortcuts: () => Promise<ShortcutResult>;
   onShortcut: (callback: (action: ShortcutAction) => void) => () => void;
+  onDisplaysChanged: (callback: () => void) => () => void;
   exportBundle: (
     pdf: Uint8Array | null,
     videos: ExportVideo[],
@@ -139,6 +148,8 @@ export interface ScreenAppApi {
   ) => Promise<ExportResult | null>;
   chooseFolder: () => Promise<string | null>;
   reveal: (filePath: string) => Promise<RevealResult>;
+  checkUpdate: () => Promise<UpdateInfo>;
+  openRelease: (url: string) => Promise<boolean>;
 }
 
 declare global {
