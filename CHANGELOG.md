@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.0
+
+- Audio recording from the Windows default devices: microphone, system audio through loopback,
+  or both mixed. Off by default.
+- Audio problems degrade to a silent recording with a reason on the status bar instead of
+  aborting the capture.
+- The speed conversion keeps the audio track and holds its pitch.
+- The Mute toggle is disabled and labelled for clips that carry no audio track.
+
+## 1.2.0
+
+- Recordings can be sped up to 1.1x, 1.25x, 1.5x, 1.75x or 2x. The speed row changes the preview
+  instantly, and applying it re-encodes the file so exports really are shorter.
+- Conversion runs at playback speed with a progress figure and only replaces the clip once the
+  new file exists.
+- Mute toggle in the player. Recordings contain no audio track, so it affects playback only.
+
 ## 1.1.0
 
 - Fixed "Open output folder", which used `shell.showItemInFolder` and failed silently on

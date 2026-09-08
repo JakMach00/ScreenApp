@@ -1,5 +1,11 @@
-import type { Rect } from '../types';
-import { getDisplayStream, makeThumb } from './capture';
+import type { AudioSource, Rect } from '../types';
+import {
+  getDisplayStream,
+  getMicrophoneTrack,
+  getSystemAudioTrack,
+  makeThumb,
+  mixAudioTracks,
+} from './capture';
 
 export interface RecordOptions {
   sourceId: string;
@@ -13,6 +19,8 @@ export interface RecordOptions {
   bitrate: number;
   /** Downscale factor applied to the output, 1 = native size. */
   scale: number;
+  /** Which audio to mix into the recording. */
+  audio: AudioSource;
 }
 
 export interface RecordResult {
@@ -21,14 +29,13 @@ export interface RecordResult {
   height: number;
   durationMs: number;
   thumbUrl: string;
+  hasAudio: boolean;
 }
 
-function pickMimeType(): string {
-  const candidates = [
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm',
-  ];
+export function pickMimeType(withAudio = false): string {
+  const candidates = withAudio
+    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   for (const type of candidates) {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
   }
@@ -48,6 +55,9 @@ export class ScreenRecorder {
   private video: HTMLVideoElement | null = null;
   private timer: number | null = null;
   private chunks: Blob[] = [];
+  private audioTracks: MediaStreamTrack[] = [];
+  private audioContext: AudioContext | null = null;
+  private hasAudio = false;
   private startedAt = 0;
   private thumbUrl = '';
   private outWidth = 0;
@@ -57,7 +67,34 @@ export class ScreenRecorder {
     return this.recorder !== null;
   }
 
-  async start(options: RecordOptions, onInterrupted?: () => void): Promise<void> {
+  /**
+   * Collects the requested audio. A refused microphone or a machine without a
+   * loopback device must not kill the recording, so failures come back as
+   * warnings and the capture continues without sound.
+   */
+  private async collectAudio(options: RecordOptions): Promise<string[]> {
+    const warnings: string[] = [];
+    const wanted: ('mic' | 'system')[] = [];
+    if (options.audio === 'mic' || options.audio === 'both') wanted.push('mic');
+    if (options.audio === 'system' || options.audio === 'both') wanted.push('system');
+
+    for (const kind of wanted) {
+      try {
+        const track =
+          kind === 'mic' ? await getMicrophoneTrack() : await getSystemAudioTrack(options.sourceId);
+        this.audioTracks.push(track);
+      } catch (err) {
+        warnings.push(
+          kind === 'mic'
+            ? `Microphone unavailable: ${err instanceof Error ? err.message : String(err)}`
+            : `System audio unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return warnings;
+  }
+
+  async start(options: RecordOptions, onInterrupted?: () => void): Promise<string[]> {
     if (this.recorder) throw new Error('A recording is already running.');
 
     const stream = await getDisplayStream(
@@ -117,9 +154,26 @@ export class ScreenRecorder {
     const canvasStream = canvas.captureStream(options.fps);
     this.canvasStream = canvasStream;
 
-    const recorder = new MediaRecorder(canvasStream, {
-      mimeType: pickMimeType(),
+    const warnings = await this.collectAudio(options);
+    let audioTrack: MediaStreamTrack | null = null;
+    if (this.audioTracks.length === 1) {
+      audioTrack = this.audioTracks[0];
+    } else if (this.audioTracks.length > 1) {
+      const mixed = mixAudioTracks(this.audioTracks);
+      audioTrack = mixed.track;
+      this.audioContext = mixed.context;
+    }
+    this.hasAudio = audioTrack !== null;
+
+    const output = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...(audioTrack ? [audioTrack] : []),
+    ]);
+
+    const recorder = new MediaRecorder(output, {
+      mimeType: pickMimeType(this.hasAudio),
       videoBitsPerSecond: options.bitrate,
+      audioBitsPerSecond: 96000,
     });
     this.chunks = [];
     recorder.ondataavailable = (event: BlobEvent) => {
@@ -128,6 +182,7 @@ export class ScreenRecorder {
     recorder.start(1000);
     this.recorder = recorder;
     this.startedAt = performance.now();
+    return warnings;
   }
 
   async stop(): Promise<RecordResult> {
@@ -146,6 +201,7 @@ export class ScreenRecorder {
       height: this.outHeight,
       durationMs,
       thumbUrl: this.thumbUrl,
+      hasAudio: this.hasAudio,
     };
     this.cleanup();
     return result;
@@ -171,9 +227,16 @@ export class ScreenRecorder {
     }
     for (const track of this.canvasStream ? this.canvasStream.getTracks() : []) track.stop();
     for (const track of this.stream ? this.stream.getTracks() : []) track.stop();
+    for (const track of this.audioTracks) track.stop();
+    this.audioTracks = [];
+    if (this.audioContext) {
+      void this.audioContext.close();
+      this.audioContext = null;
+    }
     this.canvasStream = null;
     this.stream = null;
     this.recorder = null;
     this.chunks = [];
+    this.hasAudio = false;
   }
 }

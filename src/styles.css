@@ -656,3 +656,9 @@ kbd {
 .folder-row button {
   padding: 5px 9px;
 }
+
+progress {
+  width: 120px;
+  height: 8px;
+  accent-color: var(--accent);
+}

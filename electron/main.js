@@ -23,6 +23,9 @@ let win = null;
 /** Source the renderer wants when it falls back to getDisplayMedia. */
 let preferredSourceId = null;
 
+/** Set while the renderer is asking for system audio through getDisplayMedia. */
+let loopbackAudio = false;
+
 /** True only when this process hid the window in order to take a screenshot. */
 let hiddenByCapture = false;
 
@@ -79,12 +82,23 @@ app.whenReady().then(() => {
         .getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
         .then((sources) => {
           const chosen = sources.find((s) => s.id === preferredSourceId) || sources[0];
-          callback(chosen ? { video: chosen } : {});
+          if (!chosen) {
+            callback({});
+            return;
+          }
+          // 'loopback' is what captures what the machine is playing. It is only
+          // attached while the renderer explicitly asks for system audio.
+          callback(loopbackAudio ? { video: chosen, audio: 'loopback' } : { video: chosen });
         })
         .catch(() => callback({}));
     },
     { useSystemPicker: false },
   );
+
+  // Screen, microphone and system audio requests come from our own renderer.
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'media' || permission === 'display-capture');
+  });
 
   createWindow();
   app.on('activate', () => {
@@ -152,6 +166,11 @@ ipcMain.handle('capture:screen', async (_event, payload) => {
     width: size.width,
     height: size.height,
   };
+});
+
+ipcMain.handle('capture:loopback', (_event, enabled) => {
+  loopbackAudio = Boolean(enabled);
+  return loopbackAudio;
 });
 
 ipcMain.handle('capture:prefer', (_event, sourceId) => {

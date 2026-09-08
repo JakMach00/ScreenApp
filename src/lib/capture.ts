@@ -138,6 +138,51 @@ export async function cropImage(
   return { blob, width: canvas.width, height: canvas.height, thumbUrl: makeThumb(canvas) };
 }
 
+/** Microphone track from whatever Windows has set as the default input. */
+export async function getMicrophoneTrack(): Promise<MediaStreamTrack> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+  });
+  const track = stream.getAudioTracks()[0];
+  if (!track) throw new Error('The microphone returned no audio track.');
+  return track;
+}
+
+/**
+ * System audio, meaning whatever the machine is playing. It only arrives
+ * through getDisplayMedia with the main process answering 'loopback', so the
+ * video track that comes with it is dropped straight away.
+ */
+export async function getSystemAudioTrack(sourceId: string): Promise<MediaStreamTrack> {
+  await window.api.setPreferredSource(sourceId);
+  await window.api.setLoopbackAudio(true);
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    for (const track of stream.getVideoTracks()) {
+      track.stop();
+      stream.removeTrack(track);
+    }
+    const track = stream.getAudioTracks()[0];
+    if (!track) throw new Error('Windows returned no system audio.');
+    return track;
+  } finally {
+    await window.api.setLoopbackAudio(false);
+  }
+}
+
+/** Mixes several audio tracks into one, needed when recording mic and system. */
+export function mixAudioTracks(tracks: MediaStreamTrack[]): {
+  track: MediaStreamTrack;
+  context: AudioContext;
+} {
+  const context = new AudioContext();
+  const destination = context.createMediaStreamDestination();
+  for (const track of tracks) {
+    context.createMediaStreamSource(new MediaStream([track])).connect(destination);
+  }
+  return { track: destination.stream.getAudioTracks()[0], context };
+}
+
 export function makeShot(params: {
   kind: ShotKind;
   blob: Blob;
@@ -146,6 +191,7 @@ export function makeShot(params: {
   thumbUrl: string;
   durationMs?: number;
   name?: string;
+  hasAudio?: boolean;
 }): Shot {
   const created = new Date();
   const ext = params.kind === 'image' ? 'png' : 'webm';
@@ -160,6 +206,7 @@ export function makeShot(params: {
     height: params.height,
     createdAt: created.getTime(),
     durationMs: params.durationMs ?? 0,
+    hasAudio: params.hasAudio ?? false,
   };
 }
 

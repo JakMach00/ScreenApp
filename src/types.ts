@@ -16,6 +16,8 @@ export interface Rect {
 
 export type ShotKind = 'image' | 'video';
 
+export type AudioSource = 'none' | 'mic' | 'system' | 'both';
+
 export interface Shot {
   id: string;
   kind: ShotKind;
@@ -27,6 +29,7 @@ export interface Shot {
   height: number;
   createdAt: number;
   durationMs: number;
+  hasAudio: boolean;
 }
 
 export type ToolId =
@@ -112,6 +115,7 @@ export interface ScreenAppApi {
   listSources: () => Promise<SourceInfo[]>;
   captureScreen: (sourceId: string, width: number, height: number) => Promise<CaptureResult>;
   setPreferredSource: (sourceId: string) => Promise<boolean>;
+  setLoopbackAudio: (enabled: boolean) => Promise<boolean>;
   hideWindow: (displayId?: string) => Promise<boolean>;
   showWindow: (force?: boolean) => Promise<boolean>;
   applyShortcuts: (bindings: ShortcutMap) => Promise<ShortcutResult>;

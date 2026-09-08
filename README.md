@@ -87,6 +87,48 @@ setting, the toggle sits in the top right of the sidebar, and the pick is rememb
 - The window runs with `backgroundThrottling` disabled, otherwise Chromium would slow the
   timers of a minimized window and stall the recording loop and background captures.
 
+## Speeding a recording up
+
+Opening a recording gives a speed row: 1x, 1.1x, 1.25x, 1.5x, 1.75x and 2x. Picking a value
+changes the preview immediately through `playbackRate`, which touches nothing on disk.
+"Apply Nx to the file" re-encodes the clip so the exported file really is shorter, which is the
+point: a reviewer watches 45 seconds instead of 90.
+
+The conversion plays the source into a canvas at the chosen rate and records the canvas stream,
+so it runs at playback speed. A 90 second clip at 2x takes about 45 seconds to convert, and a
+progress figure is shown while it runs. The result replaces the clip in the gallery and the file
+name gains a marker, `recording_20260908_141500_2x.webm`. The swap only happens once the new
+file exists, so a failed conversion leaves the original untouched, but the original speed cannot
+be recovered afterwards.
+
+Re-encoding costs some quality, since VP9 is being encoded from VP9. The bitrate is raised by
+about a third to compensate, and the file still ends up smaller than the original because the
+duration drops.
+
+Audio survives the conversion. The element is routed into an offline audio destination instead
+of the speakers, so nothing is heard while converting, and `preservesPitch` keeps speech at its
+normal pitch at higher rates.
+
+## Audio
+
+The Audio selector in the Recording section offers no audio (the default), microphone, system
+audio, or both mixed together. Windows decides which devices those are: the microphone is the
+default input device, and system audio is whatever the machine is playing.
+
+The two paths are not the same mechanism. The microphone comes from `getUserMedia`. System
+audio only arrives through `getDisplayMedia` with the main process answering `audio: 'loopback'`
+in `setDisplayMediaRequestHandler`, so the request is made separately and the video track that
+comes with it is dropped immediately. Mixing both goes through an `AudioContext` with two
+sources feeding one destination.
+
+Audio failures never abort a recording. A refused microphone permission or a machine with no
+loopback device leaves the capture running without sound and puts the reason on the status bar,
+because losing a take over a missing microphone would be worse than losing the sound.
+
+Windows 11 has a per-application microphone switch in Settings, Privacy and security,
+Microphone. An unsigned application that has never been granted access will simply fail there,
+and the status bar will say so.
+
 ## Export location
 
 By default every export asks where to save, which is the behaviour of a tool used across

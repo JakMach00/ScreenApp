@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   captureScreen: (sourceId, width, height) =>
     ipcRenderer.invoke('capture:screen', { sourceId, width, height }),
   setPreferredSource: (sourceId) => ipcRenderer.invoke('capture:prefer', sourceId),
+  setLoopbackAudio: (enabled) => ipcRenderer.invoke('capture:loopback', enabled),
   hideWindow: (displayId) => ipcRenderer.invoke('window:hide', displayId || null),
   showWindow: (force) => ipcRenderer.invoke('window:show', Boolean(force)),
   applyShortcuts: (bindings) => ipcRenderer.invoke('shortcuts:apply', bindings),

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor';
 import Gallery from './components/Gallery';
 import RegionSelector from './components/RegionSelector';
+import VideoPlayer from './components/VideoPlayer';
 import ShortcutSettings from './components/ShortcutSettings';
 import {
   bytesToBlob,
@@ -15,7 +16,7 @@ import { buildPdf } from './lib/pdf';
 import { ScreenRecorder } from './lib/recorder';
 import { mergeShortcuts } from './lib/shortcuts';
 import { loadSetting, saveSetting } from './lib/storage';
-import type { Rect, ShortcutMap, Shot, SourceInfo } from './types';
+import type { AudioSource, Rect, ShortcutMap, Shot, SourceInfo } from './types';
 
 type RegionPurpose = 'shot' | 'record';
 
@@ -35,13 +36,20 @@ type QualityKey = keyof typeof QUALITY;
 
 type Theme = 'dark' | 'light';
 
+const AUDIO_OPTIONS: { id: AudioSource; label: string }[] = [
+  { id: 'none', label: 'No audio' },
+  { id: 'mic', label: 'Microphone' },
+  { id: 'system', label: 'System audio' },
+  { id: 'both', label: 'Microphone and system' },
+];
+
 export default function App() {
   const [sources, setSources] = useState<SourceInfo[]>([]);
   const [sourceId, setSourceId] = useState<string>('');
   const [shots, setShots] = useState<Shot[]>([]);
   const [frozen, setFrozen] = useState<FrozenFrame | null>(null);
   const [editorPos, setEditorPos] = useState<number | null>(null);
-  const [playing, setPlaying] = useState<Shot | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [status, setStatus] = useState<string>('Ready.');
@@ -51,6 +59,9 @@ export default function App() {
   const [useSaveDir, setUseSaveDir] = useState<boolean>(() => loadSetting('useSaveDir', false));
 
   const [quality, setQuality] = useState<QualityKey>(() => loadSetting('quality', 'medium'));
+  const [audioSource, setAudioSource] = useState<AudioSource>(() =>
+    loadSetting<AudioSource>('audioSource', 'none'),
+  );
   const [hideOnCapture, setHideOnCapture] = useState<boolean>(() =>
     loadSetting('hideOnCapture', true),
   );
@@ -76,6 +87,10 @@ export default function App() {
     [sources, sourceId],
   );
   const images = useMemo(() => shots.filter((s) => s.kind === 'image'), [shots]);
+  const playing = useMemo(
+    () => shots.find((s) => s.id === playingId) ?? null,
+    [shots, playingId],
+  );
 
   useEffect(() => {
     saveSetting('theme', theme);
@@ -83,6 +98,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => saveSetting('quality', quality), [quality]);
+  useEffect(() => saveSetting('audioSource', audioSource), [audioSource]);
   useEffect(() => saveSetting('hideOnCapture', hideOnCapture), [hideOnCapture]);
   useEffect(() => saveSetting('clearAfterExport', clearAfterExport), [clearAfterExport]);
   useEffect(() => saveSetting('compressPdf', compressPdf), [compressPdf]);
@@ -166,7 +182,7 @@ export default function App() {
       if (!source || recording) return;
       const q = QUALITY[quality];
       try {
-        await recorderRef.current.start(
+        const warnings = await recorderRef.current.start(
           {
             sourceId: source.id,
             screenWidth: source.width,
@@ -175,6 +191,7 @@ export default function App() {
             fps: q.fps,
             bitrate: q.bitrate,
             scale: q.scale,
+            audio: audioSource,
           },
           () => {
             setStatus('The screen stream was interrupted.');
@@ -182,12 +199,13 @@ export default function App() {
         );
         setElapsed(0);
         setRecording(true);
-        setStatus(region ? 'Recording a region of the screen.' : 'Recording the whole screen.');
+        const base = region ? 'Recording a region of the screen.' : 'Recording the whole screen.';
+        setStatus(warnings.length > 0 ? `${base} ${warnings.join(' ')}` : base);
       } catch (err) {
         setStatus(`Could not start recording: ${String(err)}`);
       }
     },
-    [source, recording, quality],
+    [source, recording, quality, audioSource],
   );
 
   const stopRecording = useCallback(async () => {
@@ -203,6 +221,7 @@ export default function App() {
           height: result.height,
           thumbUrl: result.thumbUrl,
           durationMs: result.durationMs,
+          hasAudio: result.hasAudio,
         }),
       );
       setStatus(`Recording saved, length ${formatDuration(result.durationMs)}.`);
@@ -239,7 +258,7 @@ export default function App() {
       const shot = shots[index];
       if (!shot) return;
       if (shot.kind === 'video') {
-        setPlaying(shot);
+        setPlayingId(shot.id);
         return;
       }
       const pos = images.findIndex((s) => s.id === shot.id);
@@ -296,6 +315,38 @@ export default function App() {
     const result = await window.api.reveal(lastDir);
     if (!result.ok) setStatus(`Could not open the folder: ${result.error ?? 'unknown error'}`);
   }, [lastDir]);
+
+  const replaceVideo = useCallback(
+    (
+      shotId: string,
+      result: {
+        blob: Blob;
+        width: number;
+        height: number;
+        durationMs: number;
+        thumbUrl: string;
+        name: string;
+      },
+    ) => {
+      setShots((prev) =>
+        prev.map((s) => {
+          if (s.id !== shotId) return s;
+          URL.revokeObjectURL(s.url);
+          return {
+            ...s,
+            blob: result.blob,
+            url: URL.createObjectURL(result.blob),
+            thumbUrl: result.thumbUrl,
+            width: result.width,
+            height: result.height,
+            durationMs: result.durationMs,
+            name: result.name,
+          };
+        }),
+      );
+    },
+    [],
+  );
 
   const exportAll = useCallback(async () => {
     if (shots.length === 0) {
@@ -466,6 +517,20 @@ export default function App() {
             </>
           )}
           <label className="field">
+            <span>Audio</span>
+            <select
+              value={audioSource}
+              onChange={(e) => setAudioSource(e.target.value as AudioSource)}
+              disabled={recording}
+            >
+              {AUDIO_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             <span>Quality</span>
             <select
               value={quality}
@@ -605,16 +670,13 @@ export default function App() {
       ) : null}
 
       {playing ? (
-        <div className="modal">
-          <div className="modal-bar">
-            <span>{playing.name}</span>
-            <span className="spacer" />
-            <button onClick={() => setPlaying(null)}>Close</button>
-          </div>
-          <div className="modal-body">
-            <video src={playing.url} controls autoPlay className="player" />
-          </div>
-        </div>
+        <VideoPlayer
+          shot={playing}
+          bitrate={QUALITY[quality].bitrate}
+          onReplace={(result) => replaceVideo(playing.id, result)}
+          onStatus={setStatus}
+          onClose={() => setPlayingId(null)}
+        />
       ) : null}
     </div>
   );
